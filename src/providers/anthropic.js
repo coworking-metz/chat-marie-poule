@@ -8,8 +8,8 @@ const FALLBACKS = process.env.FALLBACKS !== "off";
 
 const TOOLS = TOOL_DEFS.map((t) => ({ name: t.name, description: t.description, strict: true, input_schema: t.parameters }));
 
-function runTool(block) {
-  const r = execTool(block.name, block.input ?? {});
+async function runTool(block) {
+  const r = await execTool(block.name, block.input ?? {});
   return { type: "tool_result", tool_use_id: block.id, content: r.texte, ...(r.ok ? {} : { is_error: true }) };
 }
 
@@ -69,7 +69,7 @@ export function createRunner(profile) {
         // Le texte de ce tour (narration avant l'outil) n'est pas la réponse : le client doit l'effacer.
         yield { type: "reset" };
         yield { type: "status", text: LABEL[uses[0].name] ?? "Consultation…" };
-        messages.push({ role: "user", content: uses.map(runTool) });
+        messages.push({ role: "user", content: await Promise.all(uses.map(runTool)) });
       }
       yield { type: "done" };
     } catch (e) {

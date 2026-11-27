@@ -1,9 +1,10 @@
 // Éléments communs aux fournisseurs de modèle : outils, exécution, messages utilisateur.
 import { chercher, lireFiche } from "../corpus.js";
 import { CONTACT_URL } from "../prompt.js";
+import { presenceEnDirect } from "../presence.js";
 
 export const MAX_TOOL_ROUNDS = 3;
-export const LABEL = { lire_fiche: "Consultation d'une fiche…", chercher: "Recherche dans le corpus…" };
+export const LABEL = { lire_fiche: "Consultation d'une fiche…", chercher: "Recherche dans le corpus…", presence_en_direct: "Consultation de la présence en direct…" };
 export const TRUNCATED_TEXT = "\n\n*(réponse tronquée : posez-moi la question de façon plus précise pour la suite.)*";
 export const BUSY_TEXT = "Le service est très sollicité, réessayez dans un instant.";
 export const FAILURE_TEXT = `Marie-Poule a un petit souci technique. Réessayez dans un instant, ou passez par la page Contact : ${CONTACT_URL}`;
@@ -35,11 +36,18 @@ export const TOOL_DEFS = [
       additionalProperties: false,
     },
   },
+  {
+    name: "presence_en_direct",
+    description:
+      "Donne le nombre estimé de personnes présentes dans l'espace en ce moment, la capacité et les postes libres. Sans argument. À utiliser pour toute question sur l'affluence actuelle ou sur la place disponible maintenant.",
+    parameters: { type: "object", properties: {}, additionalProperties: false },
+  },
 ];
 
-/** Exécute un outil : { ok, texte }. `input` doit déjà être un objet. */
-export function execTool(name, input) {
+/** Exécute un outil : { ok, texte } (promesse). `input` doit déjà être un objet. */
+export async function execTool(name, input) {
   try {
+    if (name === "presence_en_direct") return { ok: true, texte: JSON.stringify(await presenceEnDirect()) };
     if (name === "lire_fiche") return lireFiche(input?.chemin);
     if (name === "chercher") return chercher(input?.mots);
     return { ok: false, texte: "Outil inconnu." };

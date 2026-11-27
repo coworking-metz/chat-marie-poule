@@ -213,7 +213,7 @@ export function createRunner(profile) {
         if (r.text) yield { type: "reset" };
         yield { type: "status", text: LABEL[calls[0].name] ?? "Consultation…" };
         for (const c of calls) {
-          const out = c.parsed.erreur ? { ok: false, texte: c.parsed.erreur } : execTool(c.name, c.parsed.input);
+          const out = c.parsed.erreur ? { ok: false, texte: c.parsed.erreur } : await execTool(c.name, c.parsed.input);
           messages.push({ role: "tool", tool_call_id: c.id, name: c.name, content: out.ok ? out.texte : `Erreur : ${out.texte}` });
         }
       }

@@ -41,7 +41,7 @@ try {
   assert.equal(p.model, "faux-modele"); assert.equal(p.stream, true); assert.deepEqual(p.stream_options, { include_usage: true });
   assert.equal(p.temperature, 0.2); assert.equal(p.tool_choice, "auto"); assert.equal(p.reasoning_effort, "low");
   assert.ok(p.max_tokens >= 16 && p.max_tokens <= 4000);
-  assert.deepEqual(p.tools.map((t) => t.function.name), ["lire_fiche", "chercher"]);
+  assert.deepEqual(p.tools.map((t) => t.function.name), ["lire_fiche", "chercher", "presence_en_direct"]);
   assert.ok(!("output_config" in p) && !("betas" in p) && !("fallbacks" in p) && !("system" in p));
   assert.equal(p.messages[0].role, "system"); assert.ok(p.messages[0].content.includes("Index factice") && p.messages[0].content.includes("Marie-Poule"));
   assert.equal(p.messages.filter((m) => m.role === "system").length, 1);

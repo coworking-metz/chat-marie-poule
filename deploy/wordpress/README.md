@@ -48,3 +48,17 @@ Supprimer `wp-content/mu-plugins/cowo-me-summary.php` (rien d'autre n'est modifi
 - Sections absentes ou indisponibles : `null` (et nom listé dans `indisponible` : `adhesion`, `abonnement`, `carnets`, `tarif`, `presences`, `droits`, `nomade`, `achats`).
 - `achats` : 30 derniers articles de commandes payées ou terminées, du plus récent au plus ancien ; `categorie` : `abonnement|carnet|nomade|adhesion|contribution|impression|autre` ; `plus_anciens` : articles non listés (approximatif au-delà de 100 commandes).
 - `statistiques` : agrégats seulement, jamais la liste brute des présences.
+
+# Endpoint WordPress `presence-now`
+
+`cowo-presence-now.php` (mu-plugin autonome, déployé le 2026-11-27) ajoute la route publique `GET /api-json-wp/cowo/v1/presence-now` : la présence en direct en JSON, sans HTML, consommée par l'outil `presence_en_direct` du chat (`PRESENCE_URL`).
+
+- Source : la même que `coworkers_now` (nombre d'éléments de `{TICKET_BASE_URL}/current-members`, clé du site jamais exposée), capacité `COWORKING_NB_PLACES` (40). Délai d'attente 3 s. Aucun nom, identifiant ni appareil dans la réponse.
+- Public, lecture seule, sans paramètre. Source en échec : HTTP 200, `presents`/`libres` à `null`, `indisponible: true`.
+- Cache : transient WordPress de 30 s (10 s si échec) ; `Cache-Control: public, max-age=30, s-maxage=30` (Cloudflare).
+- Installation : `php -l`, copie atomique (`.tmp` puis `mv`) dans `wp-content/mu-plugins/`, vérifier `/` et `/api-json-wp/` (200 ; `/wp-json/` répond 302, normal). Annulation : supprimer ce seul fichier.
+
+```json
+{ "presents": 14, "capacite": 40, "libres": 26, "estimation": true, "delai_minutes": 10, "mis_a_jour": "2026-11-27T12:03:23+01:00", "indisponible": false }
+```
+`estimation` vaut toujours `true` (appareils enregistrés vus sur le wifi depuis moins de `delai_minutes` minutes) ; `mis_a_jour` est en heure de Paris.

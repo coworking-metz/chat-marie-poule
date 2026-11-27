@@ -35,6 +35,9 @@ export async function startFakeOpenAI() {
       case "boucle": // demande toujours un outil : doit s'arrêter après 3 tours, dernier tour en tool_choice none
         if (payload.tool_choice === "none") return sse(res, text("Fin forcée."));
         return sse(res, toolCall("call_b", "chercher", ['{"mots":"x"}']));
+      case "presence":
+        if (!afterTool) return sse(res, toolCall("call_p", "presence_en_direct", ["{}"]));
+        return sse(res, text(`Outil : ${msgs.at(-1).content}`));
       case "429": res.writeHead(429, { "Content-Type": "application/json" }); return res.end('{"error":{"message":"rate limit"}}');
       case "500": res.writeHead(500, { "Content-Type": "application/json" }); return res.end('{"error":{"message":"boom secret-detail"}}');
       case "filtre": return sse(res, [chunk({ role: "assistant", content: "" }), chunk({}, "content_filter"), usage()]);

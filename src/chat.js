@@ -4,8 +4,13 @@ import { chercher, lireFiche } from "./corpus.js";
 import { CONTACT_URL, REFUS_TYPE, systemPrompt } from "./prompt.js";
 import { addUsage } from "./limits.js";
 
-export const MODEL = process.env.MODEL || "claude-opus-5-5";
-const MAX_TOKENS = Number(process.env.MAX_OUTPUT_TOKENS) || 1500;
+// Le modèle est défini dans .env (MODEL=...) : aucune valeur par défaut dans le code.
+export const MODEL = process.env.MODEL;
+if (!MODEL) {
+  console.error("MODEL manquant : ajoutez MODEL=claude-opus-5-5 (par exemple) dans .env.");
+  process.exit(1);
+}
+const MAX_TOKENS = Number(process.env.MAX_OUTPUT_TOKENS) || 700;
 const MAX_TOOL_ROUNDS = 3;
 const EFFORT = process.env.EFFORT || "low";
 const FALLBACKS = process.env.FALLBACKS !== "off";
@@ -60,8 +65,10 @@ const LABEL = { lire_fiche: "Consultation d'une fiche…", chercher: "Recherche 
  * Générateur d'événements : { type: "status"|"delta"|"done"|"error", ... }.
  * `history` = messages {role, content:string} déjà validés.
  */
-export async function* chat(history, signal) {
+export async function* chat(history, signal, { memberBlock } = {}) {
+  // Préfixe identique pour tous (mis en cache) ; le contexte du membre vient APRÈS, sans cache_control.
   const system = [{ type: "text", text: systemPrompt(), cache_control: { type: "ephemeral", ttl: "1h" } }];
+  if (memberBlock) system.push({ type: "text", text: memberBlock });
   const messages = history.map((m) => ({ role: m.role, content: m.content }));
   try {
     for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
@@ -101,6 +108,8 @@ export async function* chat(history, signal) {
       // Le tour de l'assistant est renvoyé tel quel (blocs de réflexion compris), puis les résultats d'outils.
       messages.push({ role: "assistant", content: msg.content });
       const uses = msg.content.filter((b) => b.type === "tool_use");
+      // Le texte de ce tour (narration avant l'outil) n'est pas la réponse : le client doit l'effacer.
+      yield { type: "reset" };
       yield { type: "status", text: LABEL[uses[0].name] ?? "Consultation…" };
       messages.push({ role: "user", content: uses.map(runTool) });
     }

@@ -1,4 +1,5 @@
 // Évaluation de bout en bout : node test/run.mjs [--cat hors-sujet] [--id tarif-1] [--url http://localhost:3000]
+// Le serveur doit être lancé avec ANON_MAX_QUESTIONS_PER_IP_PER_DAY=1000 (sinon le plafond anonyme par IP bloque l'évaluation).
 // ATTENTION : chaque question appelle l'API Anthropic (coût réel, de l'ordre de quelques centimes par question).
 import fs from "node:fs";
 const args = process.argv.slice(2);

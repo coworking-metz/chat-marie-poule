@@ -21,7 +21,8 @@ a:hover { background: var(--jaune); }
 :focus-visible { outline: 3px solid var(--encre); outline-offset: 2px; }
 
 .app { max-width: 760px; min-height: 100dvh; margin: 0 auto; padding: 20px 16px 16px; display: flex; flex-direction: column; gap: 18px; }
-.brand img { display: block; height: 52px; width: auto; }
+.brand { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.brand img { display: block; height: auto; width: auto; max-height: 56px; min-width: 0; max-width: 100%; flex: 0 1 auto; }
 
 .hero { margin: auto 0; text-align: center; padding: 16px 0 8px; }
 .hero h1 { margin: 0 0 12px; font-size: clamp(1.7rem, 5.5vw, 2.6rem); line-height: 1.15; font-weight: 700; }
@@ -69,3 +70,31 @@ a:hover { background: var(--jaune); }
 .reset { font: 500 .85rem Poppins, sans-serif; background: none; border: 1.5px solid var(--bord); border-radius: 999px; padding: 6px 14px; cursor: pointer; color: var(--encre); }
 .reset:hover { border-color: var(--jaune); background: #fff8e4; }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+.foot-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.reset:disabled { opacity: .6; cursor: progress; }
+
+/* Compte (en-tête, à droite) */
+.account { position: relative; flex: 0 0 auto; }
+.login, .user-btn {
+  display: inline-flex; align-items: center; gap: 8px; font: 600 .9rem Poppins, sans-serif; text-decoration: none; cursor: pointer;
+  padding: 8px 16px; border-radius: 999px; background: var(--jaune); color: var(--encre); border: 2px solid var(--jaune); min-height: 40px;
+}
+.login:hover, .user-btn:hover { background: var(--jaune-fonce); border-color: var(--jaune-fonce); }
+.avatar { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--encre); color: var(--creme); font-size: .8rem; font-weight: 700; }
+.user-name { max-width: 11em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.user-menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 10; min-width: 100%; background: var(--blanc); border: 1.5px solid var(--bord); border-radius: 14px; box-shadow: var(--ombre); padding: 4px; }
+.user-item { width: 100%; text-align: left; font: 500 .9rem Poppins, sans-serif; padding: 10px 14px; border: 0; border-radius: 10px; background: none; color: var(--encre); cursor: pointer; white-space: nowrap; }
+.user-item:hover, .user-item:focus-visible { background: #fff8e4; }
+@media (max-width: 480px) { .user-name { max-width: 6em; } .login, .user-btn { padding: 8px 12px; font-size: .85rem; } .brand img { max-height: 44px; } }
+
+/* Limite des visiteurs anonymes */
+.limit { background: var(--blanc); border: 1.5px solid var(--jaune); border-radius: var(--rayon); padding: 16px 18px; box-shadow: var(--ombre); }
+.limit p { margin: 0 0 12px; }
+.limit-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.btn { display: inline-block; font: 600 .9rem Poppins, sans-serif; text-decoration: none; padding: 10px 18px; border-radius: 999px; border: 2px solid var(--encre); color: var(--encre); background: var(--blanc); }
+.btn:hover { background: #fff8e4; }
+.btn-main { background: var(--jaune); border-color: var(--jaune); }
+.btn-main:hover { background: var(--jaune-fonce); border-color: var(--jaune-fonce); }
+.composer[data-off] { opacity: .6; background: #efece4; }
+.composer textarea:disabled { cursor: not-allowed; }
+[hidden] { display: none !important; }

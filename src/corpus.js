@@ -30,7 +30,9 @@ export function loadCorpus() {
     const raw = fs.readFileSync(path.join(ROOT, rel), "utf8");
     const body = raw.replace(/^---\n[\s\S]*?\n---\n?/, "");
     const titre = (raw.match(/^titre:\s*(.+)$/m) || [, rel])[1].trim();
-    fiches.set(rel, { path: rel, titre, body, norm: stripAccents(`${titre}\n${body}`) });
+    const front = (raw.match(/^---\n([\s\S]*?)\n---/) || [, ""])[1];
+    const urls = [...new Set([...front.matchAll(/https?:\/\/[^\s"']+/g)].map((m) => m[0]))];
+    fiches.set(rel, { path: rel, titre, body, urls, norm: stripAccents(`${titre}\n${body}`) });
   }
   cache = { index, fiches };
   return cache;
@@ -55,7 +57,8 @@ export function lireFiche(chemin) {
   if (!f) {
     return { ok: false, texte: `Fiche introuvable : « ${clean.slice(0, 120)} ». Utilise un chemin exact du catalogue (ex. themes/tarifs-et-abonnements.md) ou l'outil chercher.` };
   }
-  return { ok: true, texte: `# ${f.titre}\n(fiche : ${f.path})\n\n${f.body}` };
+  const src = f.urls.length ? `Pages du site sources de cette fiche (à citer en lien Markdown) : ${f.urls.join(" ; ")}\n` : "";
+  return { ok: true, texte: `# ${f.titre}\n(fiche : ${f.path})\n${src}\n${f.body}` };
 }
 
 /** chercher : classe les fiches par nombre d'occurrences des mots et renvoie des extraits. */

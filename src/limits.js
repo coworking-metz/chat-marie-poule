@@ -29,14 +29,16 @@ export function cleanMessages(input) {
   return { messages: out };
 }
 
-const hits = new Map();
-export function rateLimited(ip) {
+const hits = new Map(), pdfHits = new Map();
+const PDF_RATE_LIMIT = Number(process.env.PDF_RATE_LIMIT_PER_MIN) || 30;
+export const pdfRateLimited = (key) => rateLimited(key, PDF_RATE_LIMIT, pdfHits);
+export function rateLimited(ip, limit = RATE_LIMIT, hits_ = hits) {
   const now = Date.now();
-  const arr = (hits.get(ip) ?? []).filter((t) => now - t < 60_000);
+  const arr = (hits_.get(ip) ?? []).filter((t) => now - t < 60_000);
   arr.push(now);
-  hits.set(ip, arr);
-  if (hits.size > 5000) for (const [k, v] of hits) if (!v.some((t) => now - t < 60_000)) hits.delete(k);
-  return arr.length > RATE_LIMIT;
+  hits_.set(ip, arr);
+  if (hits_.size > 5000) for (const [k, v] of hits_) if (!v.some((t) => now - t < 60_000)) hits_.delete(k);
+  return arr.length > limit;
 }
 
 // Compteurs anonymes (RGPD) : dépense estimée du jour, nombre de questions.

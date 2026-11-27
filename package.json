@@ -14,12 +14,13 @@
     "crawl": "python3 scripts/crawl-sitemap.py",
     "build:index": "node scripts/build-index.mjs",
     "dev": "node --watch src/server.js",
-    "test": "node test/unit.mjs",
+    "test": "node test/unit.mjs && node test/server.mjs",
     "eval": "node test/run.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.14.0",
-    "express": "^5.3.0"
+    "express": "^5.3.0",
+    "pdfkit": "^0.21.0"
   },
   "license": "MIT",
   "repository": {

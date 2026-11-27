@@ -5,16 +5,28 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Marie-Poule · Coworking Metz</title>
   <meta name="description" content="Posez vos questions à Marie-Poule, l'assistante virtuelle du Coworking Metz (Le Poulailler).">
-  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap">
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="/style.css">
 </head>
 <body>
   <main class="app" id="app" data-state="home">
     <header class="brand">
-      <img src="logo.svg" alt="Le Poulailler — Coworking Metz" width="180" height="60">
+      <img src="/logo.png" alt="Le Poulailler — Coworking Metz" width="1280" height="430">
+      <div class="account" id="account">
+        <a class="login" id="login" href="/auth/login" hidden>Se connecter</a>
+        <div class="user" id="user" hidden>
+          <button type="button" class="user-btn" id="user-btn" aria-haspopup="true" aria-expanded="false" aria-controls="user-menu">
+            <span class="avatar" id="avatar" aria-hidden="true"></span>
+            <span class="user-name" id="user-name"></span>
+          </button>
+          <div class="user-menu" id="user-menu" hidden>
+            <button type="button" class="user-item" id="logout">Se déconnecter</button>
+          </div>
+        </div>
+      </div>
     </header>
 
     <section class="hero" id="hero">
@@ -30,6 +42,15 @@
 
     <section class="log" id="log" aria-live="polite" aria-label="Conversation"></section>
 
+    <section class="limit" id="limit" hidden aria-live="polite" aria-label="Limite de questions atteinte">
+      <p>Vous avez posé toutes les questions que je peux traiter sans compte. Pour poursuivre, trois possibilités :</p>
+      <div class="limit-actions">
+        <a class="btn btn-main" href="https://rejoindre.coworking-metz.fr/" target="_blank" rel="noopener">Réserver une journée d'essai gratuite</a>
+        <a class="btn" href="https://www.coworking-metz.fr/contact/#ouvrir-brevo" target="_blank" rel="noopener">Écrire via le chat de contact</a>
+        <a class="btn" id="limit-login" href="/auth/login">Se connecter</a>
+      </div>
+    </section>
+
     <form class="composer" id="form" autocomplete="off">
       <label for="q" class="sr-only">Votre question</label>
       <textarea id="q" rows="1" maxlength="1000" placeholder="Écrivez votre question…" enterkeyhint="send"></textarea>
@@ -37,10 +58,13 @@
     </form>
 
     <footer class="foot">
-      <p>Marie-Poule est une IA : elle peut se tromper. Pour toute question importante, passez par la <a href="https://www.coworking-metz.fr/contact/" target="_blank" rel="noopener">page Contact</a>.</p>
-      <button type="button" class="reset" id="reset" hidden>Nouvelle question</button>
+      <p>Marie-Poule est une IA : elle peut se tromper. Pour toute question importante, passez par la <a href="https://www.coworking-metz.fr/contact/#ouvrir-brevo" target="_blank" rel="noopener">page Contact</a> (chat avec un humain). Cette conversation n'est pas enregistrée : téléchargez-la en PDF si vous souhaitez la conserver.</p>
+      <div class="foot-actions">
+        <button type="button" class="reset" id="pdf" hidden>Télécharger la conversation (PDF)</button>
+        <button type="button" class="reset" id="reset" hidden>Nouvelle question</button>
+      </div>
     </footer>
   </main>
-  <script src="app.js" type="module"></script>
+  <script src="/app.js" type="module"></script>
 </body>
 </html>

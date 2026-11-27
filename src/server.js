@@ -72,6 +72,10 @@ app.use((req, res, next) => {
 app.use(auth.attach);
 auth.mount(app);
 
+// Informations affichées en bas de page : nom du modèle (MODEL_LABEL, sinon MODEL) et mention d'hébergement (MODEL_HOSTING, facultative :
+// à ne renseigner que si elle est vraie, par ex. « hébergé en France chez OVHcloud »).
+app.get("/api/config", (req, res) => res.json({ model: process.env.MODEL_LABEL || MODEL, hosting: process.env.MODEL_HOSTING || null }));
+
 app.get("/api/health", (req, res) => res.json({ ok: true, provider: PROVIDER, model: MODEL, fiches: fiches.size, ...publicStats() }));
 
 app.post("/api/chat", express.json({ limit: "64kb" }), async (req, res) => {

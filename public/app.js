@@ -186,3 +186,13 @@ setState();
   if (p === "echec" || p === "refusee") { add("bot", p === "refusee" ? "La connexion a été annulée. Vous pouvez réessayer quand vous le souhaitez." : "La connexion à votre compte n'a pas abouti. Réessayez dans un instant.", "error"); app.dataset.state = "chat"; }
 }
 scrollToBottom();
+
+// Pied de page : nom du modèle et hébergement, lus dans la configuration du serveur (.env).
+try {
+  const cfg = await (await fetch("/api/config")).json();
+  const note = document.getElementById("model-note");
+  if (note && cfg.model) {
+    note.textContent = `Modèle utilisé : ${cfg.model}${cfg.hosting ? `, ${cfg.hosting}` : ""}.`;
+    note.hidden = false;
+  }
+} catch {}

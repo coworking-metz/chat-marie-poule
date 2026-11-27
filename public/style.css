@@ -98,3 +98,4 @@ a:hover { background: var(--jaune); }
 .composer[data-off] { opacity: .6; background: #efece4; }
 .composer textarea:disabled { cursor: not-allowed; }
 [hidden] { display: none !important; }
+.model-note { margin: 0 0 8px; font-size: .75rem; }

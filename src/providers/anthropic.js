@@ -2,14 +2,15 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { REFUS_TYPE, systemPrompt } from "../prompt.js";
 import { addUsage } from "../limits.js";
-import { MAX_TOOL_ROUNDS, LABEL, TRUNCATED_TEXT, TOOL_DEFS, execTool, errorText } from "./common.js";
+import { MAX_TOOL_ROUNDS, LABEL, TRUNCATED_TEXT, toolDefsFor, execTool, errorText } from "./common.js";
 
 const FALLBACKS = process.env.FALLBACKS !== "off";
 
-const TOOLS = TOOL_DEFS.map((t) => ({ name: t.name, description: t.description, strict: true, input_schema: t.parameters }));
+const asTools = (defs) => defs.map((t) => ({ name: t.name, description: t.description, ...(t.strict === false ? {} : { strict: true }), input_schema: t.parameters }));
+const TOOLS = asTools(toolDefsFor(false)), TOOLS_MEMBER = asTools(toolDefsFor(true));
 
-async function runTool(block) {
-  const r = await execTool(block.name, block.input ?? {});
+async function runTool(block, memberTools) {
+  const r = await execTool(block.name, block.input ?? {}, { memberTools });
   return { type: "tool_result", tool_use_id: block.id, content: r.texte, ...(r.ok ? {} : { is_error: true }) };
 }
 
@@ -22,7 +23,7 @@ export function createRunner(profile) {
     ...(process.env.WORKSPACE_ID ? { defaultHeaders: { "anthropic-workspace-id": process.env.WORKSPACE_ID } } : {}),
   });
   const MODEL = profile.model, MAX_TOKENS = profile.maxTokens || 700, EFFORT = profile.effort, price = profile.price;
-  return async function* run(history, signal, { memberBlock } = {}) {
+  return async function* run(history, signal, { memberBlock, memberTools } = {}) {
     // Préfixe identique pour tous (mis en cache) ; le contexte du membre vient APRÈS, sans cache_control.
     const system = [{ type: "text", text: systemPrompt(), cache_control: { type: "ephemeral", ttl: "1h" } }];
     if (memberBlock) system.push({ type: "text", text: memberBlock });
@@ -35,7 +36,7 @@ export function createRunner(profile) {
             max_tokens: MAX_TOKENS,
             system,
             messages,
-            tools: TOOLS,
+            tools: memberTools ? TOOLS_MEMBER : TOOLS,
             tool_choice: { type: round < MAX_TOOL_ROUNDS ? "auto" : "none" },
             output_config: { effort: EFFORT },
             ...(FALLBACKS ? { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" } : {}),
@@ -69,7 +70,7 @@ export function createRunner(profile) {
         // Le texte de ce tour (narration avant l'outil) n'est pas la réponse : le client doit l'effacer.
         yield { type: "reset" };
         yield { type: "status", text: LABEL[uses[0].name] ?? "Consultation…" };
-        messages.push({ role: "user", content: await Promise.all(uses.map(runTool)) });
+        messages.push({ role: "user", content: await Promise.all(uses.map((u) => runTool(u, memberTools))) });
       }
       yield { type: "done" };
     } catch (e) {

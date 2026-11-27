@@ -1,4 +1,5 @@
 // Évaluation de bout en bout : node test/run.mjs [--cat hors-sujet] [--id tarif-1] [--url http://localhost:3000]
+// --file questions-membre.json : questions de personne connectée (à poser À LA MAIN dans une session connectée : l'évaluation automatique est anonyme).
 // Le serveur doit être lancé avec ANON_MAX_QUESTIONS_PER_IP_PER_DAY=1000 (sinon le plafond anonyme par IP bloque l'évaluation).
 // Pour comparer des fournisseurs avec rapport détaillé : test/compare.mjs.
 // ATTENTION : chaque question appelle le fournisseur de modèle (coût réel, de l'ordre de quelques centimes par question).
@@ -7,7 +8,7 @@ const args = process.argv.slice(2);
 const opt = (n, d) => (args.includes(n) ? args[args.indexOf(n) + 1] : d);
 const URL_ = opt("--url", "http://localhost:3000");
 const cat = opt("--cat"), only = opt("--id");
-const questions = JSON.parse(fs.readFileSync(new URL("./questions.json", import.meta.url), "utf8")).filter((x) => (!cat || x.cat === cat) && (!only || x.id === only));
+const questions = JSON.parse(fs.readFileSync(new URL(`./${opt("--file", "questions.json")}`, import.meta.url), "utf8")).filter((x) => (!cat || x.cat === cat) && (!only || x.id === only));
 
 import { ask, check } from "./eval-lib.mjs";
 

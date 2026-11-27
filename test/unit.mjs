@@ -181,6 +181,71 @@ import { normalizeSummary, formatMember } from "../src/members.js";
   const c1 = calls; t += 4 * 60000; await m.contextFor("sx", session, async () => "tok"); assert.equal(calls, c1, "succès mis en cache 5 min");
   t += 2 * 60000; mode = "500"; await m.contextFor("sx", session, async () => "tok"); assert.equal(calls, c1 + 1);
 }
+// ---- outil mes_presences : historique mensuel complet / jours d'un mois (données fictives) ----
+{
+  const { formatPresences, createMembers } = await import("../src/members.js");
+  const { toolDefsFor, execTool } = await import("../src/providers/common.js");
+  const ans = Array.from({ length: 11 }, (_, i) => 2016 + i);
+  const histo = Object.fromEntries(ans.map((a) => [a, Array.from({ length: 12 }, (_, m) => (a === 2016 && m < 2 ? null : a === 2026 && m > 10 ? null : (m * 3 + a) % 9 === 0 ? 0 : ((m * 3 + a) % 9) + (m === 4 ? 0.5 : 0)))]));
+  const tot = Object.fromEntries(ans.map((a) => [a, histo[a].reduce((x, v) => x + (v ?? 0), 0)]));
+  const RAW = { premiere_venue: "2016-03-02", total: 1060, total_par_annee: tot, historique_mensuel: histo, mis_a_jour: "2026-11-27T10:00:00+00:00", email: "x@y.z" };
+  const txt = formatPresences(RAW);
+  const lignes = txt.split("\n");
+  assert.equal(lignes.length, 12, "une ligne d'introduction + une ligne par année");
+  assert.ok(lignes[1].startsWith("2016 (total ") && lignes[1].includes("janv -, févr -, mars") && lignes[11].includes("nov ") && lignes[11].includes("déc -"), "avant la première venue / mois à venir : « - »");
+  assert.ok(lignes.some((l) => l.startsWith("2019") && l.includes("mars 0,")), "0 = aucune venue");
+  assert.ok(txt.includes("Première venue : 2016-03-02") && txt.includes("total : 1060") && txt.includes("mai ") && txt.includes(".5") && !txt.includes("x@y.z"));
+  const tokens = Math.round(txt.length / 3.5);
+  console.log(`  mes_presences, 11 années d'historique : ${txt.length} caractères, ≈ ${tokens} tokens`);
+  assert.ok(tokens < 900, "résultat d'outil compact");
+  assert.equal(formatPresences({ historique_mensuel: { "2020": [1, 2] } }), null, "année incomplète ignorée -> inutilisable");
+  assert.equal(formatPresences(null), null); assert.equal(formatPresences("x"), null);
+  // mois : jours validés, hors mois écartés
+  const m = formatPresences({ mois: "2019-03", nb_jours: 2.5, jours: ["2019-03-04", "2019-04-01", "pas une date", "2019-03-12"], demi_journees: ["2019-03-12", "2019-05-05"] }, "2019-03");
+  assert.equal(m, "Présences du mois 2019-03 : 2.5 journée(s) : 2019-03-04, 2019-03-12 ; demi-journées : 2019-03-12");
+  assert.ok(formatPresences({ mois: "2019-03", nb_jours: 0, jours: [] }, "2019-03").includes("aucune venue"));
+  assert.equal(formatPresences({ mois: "2019-04", jours: [] }, "2019-03"), null, "mois différent de celui demandé");
+
+  // présence de l'outil : jamais déclaré sans memberTools
+  assert.ok(!toolDefsFor(false).some((t) => t.name === "mes_presences") && toolDefsFor(true).some((t) => t.name === "mes_presences" && t.strict === false && !t.parameters.required));
+  assert.equal((await execTool("mes_presences", {}, {})).ok, false); assert.equal((await execTool("mes_presences", {})).texte, "Outil inconnu.");
+
+  // client : jeton de la session, URL, cache 60 s par mois, échecs, délai, format invalide
+  let t = 0, calls = [], mode = "ok";
+  const f = async (url, o) => {
+    calls.push({ url, auth: o.headers.Authorization, timeout: !!o.signal });
+    if (mode === "throw") throw new Error("timeout");
+    if (mode === "500") return { ok: false, status: 500 };
+    if (mode === "badjson") return { ok: true, json: async () => ({ n: 1 }) };
+    const mois = new URL(url).searchParams.get("mois");
+    return { ok: true, json: async () => (mois ? { mois, nb_jours: 1, jours: [`${mois}-04`] } : RAW) };
+  };
+  const mem = createMembers({ url: "http://x/me/summary", presencesUrl: "http://x/api/me/presences", fetchImpl: f, now: () => t });
+  const tok = async () => "TOK1";
+  let r = await mem.presencesFor("s1", tok); assert.ok(r.texte.startsWith("Historique") && calls[0].url === "http://x/api/me/presences" && calls[0].auth === "Bearer TOK1");
+  r = await mem.presencesFor("s1", tok, "2019-03"); assert.equal(calls[1].url, "http://x/api/me/presences?mois=2019-03"); assert.ok(r.texte.includes("2019-03-04"));
+  await mem.presencesFor("s1", tok, "2019-03"); await mem.presencesFor("s1", tok); assert.equal(calls.length, 2, "cache 60 s");
+  await mem.presencesFor("s2", tok, "2019-03"); assert.equal(calls.length, 3, "cache propre à la session");
+  t += 61000; await mem.presencesFor("s1", tok, "2019-03"); assert.equal(calls.length, 4, "expiré après 60 s");
+  for (const bad of ["2019-3", "mars 2019", "2019-13", "2019-03-04", "../x", 201903, "", "2019-00"]) { const n = calls.length; r = await mem.presencesFor("s3", tok, bad); assert.ok(r.erreur && calls.length === n, `mois invalide ${bad}`); }
+  for (const md of ["throw", "500", "badjson"]) { mode = md; t += 61000; r = await mem.presencesFor("s4" + md, tok, "2020-01"); assert.deepEqual(r, { indisponible: true }, md); }
+  mode = "ok"; r = await mem.presencesFor("s5", async () => null, "2020-01"); assert.deepEqual(r, { indisponible: true }, "pas de jeton");
+  r = await createMembers({ url: "http://x", fetchImpl: f }).presencesFor("s6", tok); assert.deepEqual(r, { indisponible: true }, "route non configurée");
+  // résultat d'outil indisponible -> message sans fuite
+  const e = await execTool("mes_presences", { mois: "2020-01" }, { memberTools: { mesPresences: async () => ({ indisponible: true }) } });
+  assert.equal(e.ok, false); assert.ok(e.texte.includes("momentanément indisponible"));
+}
+{ // prompt : consigne de l'outil dans le bloc « membre » seulement
+  const { memberPrompt } = await import("../src/prompt.js");
+  const mp = memberPrompt("X");
+  assert.ok(mp.includes("mes_presences") && mp.includes("mois=AAAA-MM") && mp.includes("Ne dis jamais que tu n'as que les 12 derniers mois") && mp.includes("coworking-metz.fr/mon-compte/presences/"));
+  if (corpusPresent) assert.ok(!systemPrompt().includes("mes_presences"), "le prompt anonyme ignore l'outil");
+}
+{ // le contexte membre (me/summary) n'est pas alourdi : aucune ligne d'historique complet
+  const txt = formatMember(normalizeSummary({ prenom: "Camille", presences: { total: 1060 }, historique_mensuel: { 2019: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] }, total_par_annee: { 2019: 78 } }), "2026-11-27");
+  assert.ok(!txt.includes("2019") || txt.includes("Compte créé"), "historique mensuel ignoré dans le contexte");
+  assert.ok(!/historique/i.test(txt));
+}
 console.log("tests hors ligne : OK");
 
 // Plafond de dépense : le total du jour survit à un redémarrage (fichier de compteurs, sans texte).

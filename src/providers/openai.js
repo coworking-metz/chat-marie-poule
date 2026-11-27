@@ -2,11 +2,12 @@
 // POST <LLM_BASE_URL>/chat/completions avec fetch (pas de dépendance), streaming SSE, function calling.
 import { REFUS_TYPE, systemPrompt } from "../prompt.js";
 import { addUsage } from "../limits.js";
-import { MAX_TOOL_ROUNDS, LABEL, TRUNCATED_TEXT, TOOL_DEFS, execTool, errorText } from "./common.js";
+import { MAX_TOOL_ROUNDS, LABEL, TRUNCATED_TEXT, toolDefsFor, execTool, errorText } from "./common.js";
 
 const IDLE_TIMEOUT_MS = Number(process.env.LLM_IDLE_TIMEOUT_MS) || 45_000; // sans aucun octet reçu
 
-const TOOLS = TOOL_DEFS.map((t) => ({ type: "function", function: { name: t.name, description: t.description, parameters: t.parameters } }));
+const asTools = (defs) => defs.map((t) => ({ type: "function", function: { name: t.name, description: t.description, parameters: t.parameters } }));
+const TOOLS = asTools(toolDefsFor(false)), TOOLS_MEMBER = asTools(toolDefsFor(true));
 
 class HttpError extends Error {
   constructor(status, detail) {
@@ -90,7 +91,7 @@ async function* sseJson(body, bump) {
 }
 
 /** Un tour de modèle : renvoie { text, toolCalls, finish, usage } en émettant les fragments de texte visibles via `emit`. */
-async function* turn(cfg, messages, round, signal) {
+async function* turn(cfg, messages, round, signal, tools = TOOLS) {
   const ctl = new AbortController();
   const onAbort = () => ctl.abort();
   signal?.addEventListener("abort", onAbort, { once: true });
@@ -108,7 +109,7 @@ async function* turn(cfg, messages, round, signal) {
         stream_options: { include_usage: true },
         max_tokens: cfg.maxTokens,
         temperature: cfg.temperature,
-        tools: TOOLS,
+        tools,
         tool_choice: round < MAX_TOOL_ROUNDS ? "auto" : "none",
         ...(cfg.reasoningEffort ? { reasoning_effort: cfg.reasoningEffort } : {}),
       }),
@@ -170,14 +171,14 @@ export function createRunner(profile) {
   };
   if (!cfg.apiKey && cfg.baseUrl.includes("ovh.net")) console.error(`[chat] clé d'API absente (profil ${profile.name}) : les appels à OVH échoueront.`);
   const price = profile.price;
-  return async function* run(history, signal, { memberBlock } = {}) {
+  return async function* run(history, signal, { memberBlock, memberTools } = {}) {
     // Un seul message système (certains gabarits de modèles refusent plusieurs messages « system ») ;
     // le contexte du membre vient en dernier pour que le préfixe reste identique pour tous.
     const system = systemPrompt() + (memberBlock ? `\n\n${memberBlock}` : "");
     const messages = [{ role: "system", content: system }, ...history.map((m) => ({ role: m.role, content: m.content }))];
     try {
       for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
-        const it = turn(cfg, messages, round, signal);
+        const it = turn(cfg, messages, round, signal, memberTools ? TOOLS_MEMBER : TOOLS);
         let r;
         for (;;) {
           const n = await it.next();
@@ -213,7 +214,7 @@ export function createRunner(profile) {
         if (r.text) yield { type: "reset" };
         yield { type: "status", text: LABEL[calls[0].name] ?? "Consultation…" };
         for (const c of calls) {
-          const out = c.parsed.erreur ? { ok: false, texte: c.parsed.erreur } : await execTool(c.name, c.parsed.input);
+          const out = c.parsed.erreur ? { ok: false, texte: c.parsed.erreur } : await execTool(c.name, c.parsed.input, { memberTools });
           messages.push({ role: "tool", tool_call_id: c.id, name: c.name, content: out.ok ? out.texte : `Erreur : ${out.texte}` });
         }
       }

@@ -1,0 +1,5 @@
+[
+  {"id":"membre-mois-1","cat":"membre","q":"Je suis venu en mars 2019 ?","attendu":["2019"],"interdit":["12 derniers mois","douze derniers mois"]},
+  {"id":"membre-annee-1","cat":"membre","q":"Combien de jours suis-je venu en 2021 ?","attendu":["2021"],"interdit":["12 derniers mois","douze derniers mois"]},
+  {"id":"membre-jours-1","cat":"membre","q":"Quels jours suis-je venu en mars 2019 ?","attendu":["2019"],"interdit":["12 derniers mois","douze derniers mois"]}
+]

@@ -21,9 +21,9 @@ const { publicStats } = await import("../src/limits.js");
 assert.equal(PROVIDER, "openai-compatible");
 
 // Rejoue le chat et résume les événements : texte visible final (après le dernier reset), types, usage.
-const run = async (scenario, extra = []) => {
+const run = async (scenario, extra = [], opts = {}) => {
   const evs = [];
-  for await (const ev of chat([...extra, { role: "user", content: `SCENARIO:${scenario}` }], undefined, {})) evs.push(ev);
+  for await (const ev of chat([...extra, { role: "user", content: `SCENARIO:${scenario}` }], undefined, opts)) evs.push(ev);
   let text = "";
   for (const e of evs) { if (e.type === "reset") text = ""; if (e.type === "delta" || e.type === "refused") text += e.text; }
   return { evs, text, types: evs.map((e) => e.type), error: evs.find((e) => e.type === "error")?.text };
@@ -48,6 +48,27 @@ try {
   const u = r.evs.find((e) => e.type === "usage");
   assert.equal(u.input, 100); assert.equal(u.output, 20); assert.ok(Math.abs(u.usd - (100 * 1 + 20 * 2) / 1e6) < 1e-12, "tarifs PRICE_*");
   assert.ok(publicStats().spend_usd >= 0);
+
+  // outil mes_presences : absent pour un anonyme (non déclaré, et refusé s'il est appelé), présent pour un membre
+  assert.ok(!p.tools.some((t) => t.function.name === "mes_presences"));
+  const appels = [];
+  const memberTools = { mesPresences: async (mois) => { appels.push(mois); return mois === "2019-03" ? { texte: "Présences du mois 2019-03 : 2 journée(s) : 2019-03-04, 2019-03-05" } : mois === undefined ? { texte: "Historique : 2019 (total 54)" } : { erreur: "Format de mois invalide" }; } };
+  r = await run("mes_presences", [], { memberTools, connected: true });
+  const pm = fake.requests.at(-2).payload;
+  assert.deepEqual(pm.tools.map((t) => t.function.name), ["lire_fiche", "chercher", "presence_en_direct", "mes_presences"]);
+  assert.deepEqual(pm.tools.at(-1).function.parameters.required ?? [], [], "mois facultatif");
+  assert.deepEqual(appels, ["2019-03"]); assert.ok(r.text.includes("2019-03-04") && !r.error, r.text);
+  r = await run("mes_presences_tout", [], { memberTools, connected: true });
+  assert.deepEqual(appels.at(-1), undefined); assert.equal(appels.length, 2); assert.ok(r.text.includes("2019 (total 54)"));
+  r = await run("mes_presences_mauvais", [], { memberTools, connected: true });
+  assert.ok(r.text.includes("Erreur : Format de mois invalide") && appels.length === 2, "mois invalide refusé avant tout appel");
+  r = await run("mes_presences", [], { memberTools: { mesPresences: async () => ({ indisponible: true }) }, connected: true });
+  assert.ok(r.text.includes("momentanément indisponible") && !r.error, r.text);
+  r = await run("mes_presences", [], { connected: false }); // anonyme : l'outil n'existe pas, même si le modèle l'appelle
+  assert.ok(r.text.includes("Outil inconnu") && appels.length === 2, r.text);
+  const avant = fake.requests.length;
+  r = await run("boucle", [], { memberTools, connected: true });
+  assert.equal(fake.requests.length - avant, 4, "l'outil membre compte dans les 3 tours d'outils");
 
   // contexte du membre : même message système, en dernier
   const evs = []; for await (const ev of chat([{ role: "user", content: "SCENARIO:texte" }], undefined, { memberBlock: "# Personne connectée\nX" })) evs.push(ev);

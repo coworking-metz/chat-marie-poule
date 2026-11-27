@@ -30,6 +30,7 @@ const b64 = (b) => Buffer.from(b).toString("base64url");
 const codes = new Map();          // code -> { challenge, redirect }
 const refreshes = new Set(["R1"]);
 let tokenCalls = [];
+const presencesCalls = [];
 let issued = 0;
 const sso = http.createServer(async (req, res) => {
   const u = new URL(req.url, SSO);
@@ -60,12 +61,22 @@ const sso = http.createServer(async (req, res) => {
     if (!/^Bearer A\d+$/.test(req.headers.authorization ?? "")) return send(401, {});
     return send(200, FAKE_SUMMARY);
   }
+  if (u.pathname === "/api-json-wp/cowo/v1/me/presences") {
+    presencesCalls.push({ auth: req.headers.authorization, mois: u.searchParams.get("mois") });
+    if (!/^Bearer A\d+$/.test(req.headers.authorization ?? "")) return send(401, {});
+    const mois = u.searchParams.get("mois");
+    if (mois === "2020-02") return send(503, { code: "cowo_indisponible" });
+    if (mois === "2020-03") return; // ne répond jamais : délai de 3 s
+    if (mois && !/^\d{4}-(0[1-9]|1[0-2])$/.test(mois)) return send(400, { code: "cowo_mois_invalide" });
+    if (mois) return send(200, { mois, nb_jours: 2, jours: [`${mois}-04`, `${mois}-11`], demi_journees: [], mis_a_jour: "2026-11-27T10:00:00+00:00" });
+    return send(200, { premiere_venue: "2019-03-04", total: 120, total_par_annee: { 2019: 54, 2020: 30 }, historique_mensuel: { 2019: [null, null, 7, 5, 6, 4, 3, 2, 8, 9, 6, 4], 2020: [5, 0, 3, 2, 1, 4, 6, 3, 2, 1, 2, 1] }, mis_a_jour: "2026-11-27T10:00:00+00:00" });
+  }
   if (u.pathname === "/oauth/revoke/") return send(200, {});
   send(404, {});
 }).listen(SSO_PORT);
 
 // ---- Serveur de l'application ----
-const env = { ...process.env, PORT: String(PORT), CHAT_STUB: "test/stub-chat.mjs", SESSIONS_DIR: path.join(tmp, "sess"), ANON_FILE: path.join(tmp, "anon.json"), SPEND_FILE: path.join(tmp, "spend.json"), ANON_MAX_QUESTIONS_PER_IP_PER_DAY: "12",
+const env = { ...process.env, PORT: String(PORT), CHAT_STUB: "test/stub-chat.mjs", SESSIONS_DIR: path.join(tmp, "sess"), ANON_FILE: path.join(tmp, "anon.json"), SPEND_FILE: path.join(tmp, "spend.json"), ANON_MAX_QUESTIONS_PER_IP_PER_DAY: "13",
   SSO_ISSUER: SSO, SSO_CLIENT_ID: "marie-poule", PUBLIC_URL: BASE, MEMBER_API_URL: `${SSO}/api-json-wp/cowo/v1/me/summary`,
   ANON_MAX_QUESTIONS: "5", RATE_LIMIT_PER_MIN: "1000", MODEL: "stub",
   MODEL_LABEL: "Modèle membre", MODEL_HOSTING: "hébergement membre", ANON_MODEL: "stub-anon", ANON_MODEL_LABEL: "Modèle anonyme" };
@@ -106,6 +117,8 @@ try {
   assert.ok(st.message.includes("rejoindre.coworking-metz.fr"), "même message de renvoi, sans passer par le modèle");
   // « Nouvelle question » (historique vide) ne remet pas le compteur à zéro
   assert.equal((await events(await ask(a, [], "Autre sujet")))[0][0], "limit");
+  // outil mes_presences : jamais fourni à un visiteur anonyme (1 question de plus sur le plafond par IP, fixé à 13)
+  assert.deepEqual((await events(await ask(jar(), [], "PRESENCES?"))).filter(([e]) => e === "delta").map(([, d]) => d.text), ["outil=absent"]);
   // suppression du cookie : plafond par IP (12 par jour ; 5 déjà posées), historique falsifié à 6 questions refusé
   const nocookie = [];
   for (let i = 0; i < 9; i++) nocookie.push((await events(await ask(jar(), [], "Bonjour"))).some(([e]) => e === "limit"));
@@ -170,6 +183,21 @@ try {
   assert.ok(!/example\.org|1990|4242|Bearer/.test(ctxText), "pas d'e-mail, de date de naissance ni d'identifiant dans le contexte");
   assert.ok(ctxText.includes("donnees_personne_connectee") && ctxText.includes("UNIQUEMENT la personne"));
   assert.equal(fs.existsSync(path.join(tmp, "conv")), false, "aucun dossier de conversations");
+
+  // ---------- Outil mes_presences : membre connecté seulement, jeton de la session côté serveur ----------
+  const out = async (jj, q) => (await events(await ask(jj, [], q))).filter(([e]) => e === "delta").map(([, d]) => d.text).join("");
+  presencesCalls.length = 0;
+  let o = await out(j3, "PRESENCES?");
+  assert.ok(o.startsWith("outil=Historique des journées de présence par mois") && o.includes("2019 (total 54) : janv -, févr -, mars 7") && o.includes("2020 (total 30) : janv 5, févr 0"), o);
+  assert.equal(presencesCalls.length, 1); assert.match(presencesCalls[0].auth, /^Bearer A\d+$/); assert.equal(presencesCalls[0].mois, null);
+  assert.ok(!/Bearer|A\d+\b/.test(o), "le jeton n'est jamais transmis au modèle");
+  o = await out(j3, "PRESENCES?:2019-03");
+  assert.equal(o, "outil=Présences du mois 2019-03 : 2 journée(s) : 2019-03-04, 2019-03-11"); assert.equal(presencesCalls.at(-1).mois, "2019-03");
+  const n = presencesCalls.length; await out(j3, "PRESENCES?:2019-03"); await out(j3, "PRESENCES?"); assert.equal(presencesCalls.length, n, "cache de 60 s");
+  o = await out(j3, "PRESENCES?:mars"); assert.ok(o.includes("Format de mois invalide") && presencesCalls.length === n, "mois invalide : aucun appel à WordPress");
+  o = await out(j3, "PRESENCES?:2020-02"); assert.equal(o, 'outil={"indisponible":true}', "échec 503 -> indisponible");
+  const t0 = Date.now(); o = await out(j3, "PRESENCES?:2020-03"); assert.equal(o, 'outil={"indisponible":true}', "délai dépassé -> indisponible"); assert.ok(Date.now() - t0 < 4500, "délai de 3 s");
+  assert.equal(presencesCalls.filter((c) => !c.auth).length, 0);
 
   // ---------- PDF ----------
   const pdfRes = await call(a, "/api/pdf", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: [...pair("Quels tarifs ? é€"), ...pair("Merci", "- **80 €** [lien](https://www.coworking-metz.fr/)")] }) });

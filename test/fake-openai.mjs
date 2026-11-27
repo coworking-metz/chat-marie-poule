@@ -38,6 +38,15 @@ export async function startFakeOpenAI() {
       case "presence":
         if (!afterTool) return sse(res, toolCall("call_p", "presence_en_direct", ["{}"]));
         return sse(res, text(`Outil : ${msgs.at(-1).content}`));
+      case "mes_presences":
+        if (!afterTool) return sse(res, toolCall("call_m", "mes_presences", ['{"mois":"2019-03"}']));
+        return sse(res, text(`Outil : ${msgs.at(-1).content}`));
+      case "mes_presences_tout":
+        if (!afterTool) return sse(res, toolCall("call_t", "mes_presences", ["{}"]));
+        return sse(res, text(`Outil : ${msgs.at(-1).content}`));
+      case "mes_presences_mauvais":
+        if (!afterTool) return sse(res, toolCall("call_x", "mes_presences", ['{"mois":"mars 2019"}']));
+        return sse(res, text(`Outil : ${msgs.at(-1).content}`));
       case "429": res.writeHead(429, { "Content-Type": "application/json" }); return res.end('{"error":{"message":"rate limit"}}');
       case "500": res.writeHead(500, { "Content-Type": "application/json" }); return res.end('{"error":{"message":"boom secret-detail"}}');
       case "filtre": return sse(res, [chunk({ role: "assistant", content: "" }), chunk({}, "content_filter"), usage()]);

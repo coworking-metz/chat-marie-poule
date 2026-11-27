@@ -42,7 +42,10 @@ const sessions = createSessionStore({ ttlDays: Number(process.env.SESSION_TTL_DA
 sessions.purge();
 setInterval(() => sessions.purge(), 3600_000).unref();
 const auth = createAuth({ cfg, sessions });
-const members = createMembers({ url: process.env.MEMBER_API_URL === "off" ? null : process.env.MEMBER_API_URL || (cfg.issuer && `${cfg.issuer}/api-json-wp/cowo/v1/me/summary`) });
+const memberUrl = process.env.MEMBER_API_URL === "off" ? null : process.env.MEMBER_API_URL || (cfg.issuer && `${cfg.issuer}/api-json-wp/cowo/v1/me/summary`);
+// Route de l'historique des présences (outil mes_presences) : même site, même jeton que la synthèse.
+const presencesUrl = process.env.MEMBER_PRESENCES_URL || (memberUrl && memberUrl.replace(/\/me\/summary\/?$/, "/me/presences")) || null;
+const members = createMembers({ url: memberUrl, presencesUrl });
 const anonLimiter = anon.createAnonLimiter();
 if (!cfg.enabled) console.log("SSO non configuré (SSO_ISSUER, SSO_CLIENT_ID, PUBLIC_URL) : mode anonyme seulement.");
 const app = express();
@@ -119,8 +122,10 @@ app.post("/api/chat", express.json({ limit: "64kb" }), async (req, res) => {
   }
 
   // Contexte personnalisé (jeton de la personne, côté serveur uniquement) ; absent = réponse non personnalisée.
-  let memberBlock;
+  let memberBlock, memberTools;
   if (user) {
+    // Outil réservé à la personne connectée ; le jeton reste côté serveur.
+    memberTools = { mesPresences: (mois) => members.presencesFor(req.sid, () => auth.accessToken(req.sid), mois) };
     try { memberBlock = memberPrompt(await members.contextFor(req.sid, req.session, () => auth.accessToken(req.sid))); } catch { /* sans personnalisation */ }
   }
 
@@ -130,7 +135,7 @@ app.post("/api/chat", express.json({ limit: "64kb" }), async (req, res) => {
   res.on("close", () => ctl.abort());
   const send = (event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
   let ok = true;
-  for await (const ev of chat(messages, ctl.signal, { memberBlock, connected: !!user })) {
+  for await (const ev of chat(messages, ctl.signal, { memberBlock, memberTools, connected: !!user })) {
     if (ev.type === "delta" || ev.type === "refused") { send("delta", { text: ev.text }); }
     else if (ev.type === "reset") { send("reset", {}); } // narration avant un outil : ce n'est pas la réponse
     else if (ev.type === "status") send("status", { text: ev.text });

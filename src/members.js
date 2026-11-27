@@ -99,12 +99,42 @@ export function formatMember(d, today = new Date().toISOString().slice(0, 10)) {
   return L.join("\n");
 }
 
+const MOIS_COURTS = ["janv", "févr", "mars", "avr", "mai", "juin", "juil", "août", "sept", "oct", "nov", "déc"];
+export const MOIS_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
+export const PRESENCES_TIMEOUT_MS = 3000;
+export const PRESENCES_TTL_MS = 60_000;
+const PRESENCES_ECHEC_MS = 5000;
+const dec = (v) => (typeof v === "number" && Number.isFinite(v) && v >= 0 && v < 100000 ? Math.round(v * 2) / 2 : undefined);
+
+/**
+ * Réduit la réponse de la route me/presences à des champs de bon type et la met en forme pour le modèle (texte compact) :
+ * sans mois, une ligne par année (« - » = avant la première venue ou mois à venir, 0 = aucune venue) ; avec mois, les jours du mois.
+ * Renvoie null si la réponse est inutilisable.
+ */
+export function formatPresences(raw, mois) {
+  const r = obj(raw);
+  if (mois) {
+    if (r.mois !== mois || !Array.isArray(r.jours)) return null;
+    const jours = r.jours.map(date).filter((d) => d && d.startsWith(mois)).slice(0, 31);
+    const demi = arr(r.demi_journees, 31).map(date).filter((d) => d && jours.includes(d));
+    const n = dec(r.nb_jours) ?? jours.length;
+    return `Présences du mois ${mois} : ${n} journée(s)${jours.length ? ` : ${jours.join(", ")}` : " (aucune venue)"}${demi.length ? ` ; demi-journées : ${demi.join(", ")}` : ""}`;
+  }
+  const h = obj(r.historique_mensuel), t = obj(r.total_par_annee);
+  const annees = Object.keys(h).filter((a) => /^\d{4}$/.test(a) && Array.isArray(h[a]) && h[a].length === 12).sort().slice(0, 30);
+  if (!annees.length) return date(r.premiere_venue) || dec(r.total) === 0 ? "Aucune présence enregistrée." : null;
+  const L = [`Historique des journées de présence par mois (« - » = avant la première venue ou mois à venir ; 0 = aucune venue ce mois-là). Première venue : ${date(r.premiere_venue) ?? "inconnue"} ; total : ${dec(r.total) ?? "?"} journée(s).`];
+  for (const a of annees) L.push(`${a} (total ${dec(t[a]) ?? "?"}) : ${h[a].map((v, i) => `${MOIS_COURTS[i]} ${v === null ? "-" : (dec(v) ?? "?")}`).join(", ")}`);
+  return L.join("\n");
+}
+
 /**
  * @param {{url?: string, fetchImpl?: typeof fetch, now?: () => number, ttlMs?: number}} o
  * url : endpoint de synthèse WordPress (null = désactivé : identité de base seulement).
  */
-export function createMembers({ url, fetchImpl = fetch, now = Date.now, ttlMs = CONTEXT_TTL_MS } = {}) {
+export function createMembers({ url, presencesUrl, fetchImpl = fetch, now = Date.now, ttlMs = CONTEXT_TTL_MS } = {}) {
   const cache = new Map(); // sid -> { exp, text }
+  const pcache = new Map(); // sid|mois -> { exp, text }
 
   async function fetchSummary(token) {
     const res = await fetchImpl(url, { headers: { Authorization: `Bearer ${token}`, Accept: "application/json" }, signal: AbortSignal.timeout(HTTP_TIMEOUT_MS) });
@@ -132,5 +162,33 @@ export function createMembers({ url, fetchImpl = fetch, now = Date.now, ttlMs = 
     return out;
   }
 
-  return { contextFor, forget: (sid) => cache.delete(sid) };
+  /**
+   * Outil mes_presences : texte compact (historique mensuel complet, ou jours d'un mois) ou { indisponible: true }.
+   * Jeton de la session côté serveur, délai 3 s, cache 60 s par session et par mois ; le résultat n'est pas journalisé.
+   */
+  async function presencesFor(sid, getToken, mois) {
+    if (mois !== undefined && (typeof mois !== "string" || !MOIS_RE.test(mois))) return { erreur: "Format de mois invalide : AAAA-MM attendu (ex. 2019-03)." };
+    if (!presencesUrl) return { indisponible: true };
+    const key = `${sid}|${mois ?? ""}`;
+    const hit = pcache.get(key);
+    if (hit && now() < hit.exp) return hit.value;
+    let value = { indisponible: true };
+    try {
+      const token = await getToken();
+      if (token) {
+        const u = new URL(presencesUrl);
+        if (mois) u.searchParams.set("mois", mois);
+        const res = await fetchImpl(u.toString(), { headers: { Authorization: `Bearer ${token}`, Accept: "application/json" }, redirect: "error", signal: AbortSignal.timeout(PRESENCES_TIMEOUT_MS) });
+        if (res.ok) {
+          const texte = formatPresences(await res.json(), mois);
+          if (texte) value = { texte };
+        }
+      }
+    } catch { /* délai, réseau, JSON invalide : indisponible */ }
+    pcache.set(key, { exp: now() + (value.texte ? PRESENCES_TTL_MS : PRESENCES_ECHEC_MS), value });
+    if (pcache.size > 2000) for (const [k, v] of pcache) if (now() >= v.exp) pcache.delete(k);
+    return value;
+  }
+
+  return { contextFor, presencesFor, forget: (sid) => { cache.delete(sid); for (const k of pcache.keys()) if (k.startsWith(`${sid}|`)) pcache.delete(k); } };
 }

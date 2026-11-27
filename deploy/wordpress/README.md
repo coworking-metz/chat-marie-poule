@@ -4,7 +4,7 @@
 Le préfixe REST est `wp-json` par défaut (sur le site du coworking : `api-json-wp`, `wp-json` y redirige en 302).
 
 ## Principes
-- Ne renvoie que les données de l'utilisateur courant : aucun paramètre d'identifiant, un paramètre éventuel est ignoré.
+- Ne renvoie que les données de l'utilisateur courant : aucun paramètre d'identifiant, un paramètre éventuel est ignoré (vaut pour `me/summary` comme pour `me/presences`).
 - Authentification : session WordPress ou jeton Bearer reconnu par le serveur OAuth (filtre `determine_current_user`). Sans authentification : 401, aucune donnée.
 - Jamais d'e-mail, téléphone, adresse, date de naissance, nom de famille, identifiant technique, numéro de commande ni clé.
 - Une source indisponible ne provoque pas d'erreur 500 : les champs valent `null` et la section est listée dans `indisponible`.
@@ -48,6 +48,25 @@ Supprimer `wp-content/mu-plugins/cowo-me-summary.php` (rien d'autre n'est modifi
 - Sections absentes ou indisponibles : `null` (et nom listé dans `indisponible` : `adhesion`, `abonnement`, `carnets`, `tarif`, `presences`, `droits`, `nomade`, `achats`).
 - `achats` : 30 derniers articles de commandes payées ou terminées, du plus récent au plus ancien ; `categorie` : `abonnement|carnet|nomade|adhesion|contribution|impression|autre` ; `plus_anciens` : articles non listés (approximatif au-delà de 100 commandes).
 - `statistiques` : agrégats seulement, jamais la liste brute des présences.
+
+## Route `me/presences` (historique complet, ajoutée le 2026-11-27 dans le même fichier)
+`GET /api-json-wp/cowo/v1/me/presences[?mois=AAAA-MM]` : détail des venues PASSÉES de la personne authentifiée (outil `mes_presences` du chat). `me/summary` n'est pas alourdi et son contrat est inchangé.
+- Source : liste complète des présences du service tickets (`/members/{id}/activity`, une entrée par jour avec `date`, `value` (1 ou 0,5), `type`) : tout l'historique, depuis la première venue ; ~200 octets par jour (un millier de jours ≈ 200 Ko lus côté serveur, ≈ 50 ms pour 200 jours), jamais renvoyé en entier. Les journées « nomades » ne sont pas dans cette source.
+- Mêmes protections que `me/summary` (401 sans authentification, `Cache-Control: no-store, private`, `Vary: Authorization, Cookie`, erreurs sans détail) ; délai de 3 s vers le service tickets ; cache transient de 60 s par utilisateur et par paramètre (succès seulement). Source en échec : 503 `cowo_indisponible`.
+- `mois` : `AAAA-MM`, pas avant 2014-01, pas dans le futur ; sinon 400 `cowo_mois_invalide`.
+
+Sans paramètre : historique compact (`null` = avant la première venue ou mois à venir, `0` = aucune venue ; demi-journées : valeurs en `x,5`).
+```json
+{ "premiere_venue": "2019-03-04", "total": 120,
+  "total_par_annee": { "2019": 54, "2020": 30 },
+  "historique_mensuel": { "2019": [null, null, 7, 5, 6, 4, 3, 2, 8, 9, 6, 4], "2020": [5, 0, 3, 2, 1, 4, 6, 3, 2, 1, 2, 1] },
+  "mis_a_jour": "2026-11-27T10:00:00+00:00" }
+```
+Avec `?mois=2019-03` :
+```json
+{ "mois": "2019-03", "nb_jours": 7, "jours": ["2019-03-04", "2019-03-05"], "demi_journees": [], "mis_a_jour": "2026-11-27T10:00:00+00:00" }
+```
+Déploiement : même procédure (sauvegarde hors `mu-plugins`, `php -l`, copie atomique, contrôle de `/` et `/api-json-wp/`). Annulation : restaurer la sauvegarde `cowo-me-summary.php.bak-avant-historique` (la route `me/presences` disparaît, rien d'autre ne change).
 
 # Endpoint WordPress `presence-now`
 

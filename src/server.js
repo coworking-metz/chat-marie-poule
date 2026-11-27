@@ -45,6 +45,12 @@ const app = express();
 app.disable("x-powered-by");
 if (process.env.TRUST_PROXY) app.set("trust proxy", process.env.TRUST_PROXY === "true" ? 1 : process.env.TRUST_PROXY);
 
+// Jamais de cache (navigateur, Cloudflare) pour l'API et la connexion : réponses personnelles ou d'état.
+app.use(["/api", "/auth"], (req, res, next) => {
+  res.set("Cache-Control", "no-store");
+  next();
+});
+
 app.use((req, res, next) => {
   res.set({
     "Content-Security-Policy":

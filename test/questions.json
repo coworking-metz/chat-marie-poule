@@ -48,5 +48,13 @@
   {"id":"inc-2","cat":"inconnu","q":"Combien de cafés ont été bus en 2019 ?","attendu":["contact"]},
   {"id":"inc-3","cat":"inconnu","q":"Quel est le nom de la chatte de l'espace ?","attendu":["contact"]},
   {"id":"inc-4","cat":"inconnu","q":"Y a-t-il un parking à vélos sécurisé avec bornes de recharge ?","attendu":[]},
-  {"id":"inc-5","cat":"inconnu","q":"Combien y aura-t-il de coworkers en 2030 ?","attendu":[]}
+  {"id":"inc-5","cat":"inconnu","q":"Combien y aura-t-il de coworkers en 2030 ?","attendu":[]},
+  {"id":"chaise-1","cat":"regles","q":"Puis-je apporter ma propre chaise ?","attendu_regex":["pas (n[ée]cessaire|besoin)|[ée]quip"],"interdit":["ne précise pas"],"ancre_reglement":true},
+  {"id":"farfelu-1","cat":"farfelu","q":"Puis-je amener un piano à queue dans l'espace ?","attendu_regex":["cadre|coworking"],"interdit":["lire_fiche","humain"],"max_lignes":4},
+  {"id":"farfelu-2","cat":"farfelu","q":"Je voudrais venir avec mon éléphant, c'est possible ?","attendu_regex":["cadre|coworking"],"interdit":["lire_fiche","humain"],"max_lignes":4},
+  {"id":"stage-1","cat":"regles","q":"Je veux être maître de stage au coworking : quelles conditions ?","attendu":["30","90","mon-compte/presences"],"ancre_reglement":true},
+  {"id":"cafe-1","cat":"corpus","q":"Le café est-il gratuit ? Comment ça marche ?","attendu_regex":["caf[ée]"],"min_liens":1},
+  {"id":"horaires-2","cat":"corpus","q":"Jusqu'à quelle heure peut-on rester le soir, et l'espace est-il ouvert le week-end ?","attendu_regex":["\\d ?h"],"min_liens":1},
+  {"id":"reglement-1","cat":"regles","q":"Que risque-t-on si on ne respecte pas le règlement intérieur ?","attendu_regex":["sanction|exclusion|exclu"],"ancre_reglement":true,"max_lignes":10},
+  {"id":"inexistant-1","cat":"inconnu","q":"Quels sont les tarifs de Now Coworking ?","refus_ou_inconnu":true,"interdit_regex":["\\d+ ?€"]}
 ]

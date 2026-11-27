@@ -3,7 +3,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "context");
+// CORPUS_DIR : réservé aux tests (corpus factice) ; par défaut le dossier context/ du dépôt.
+const ROOT = process.env.CORPUS_DIR ? path.resolve(process.env.CORPUS_DIR) : path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "context");
 
 // Fiches du corpus = tous les .md hors INDEX.md et hors noms commençant par « _ ».
 function walk(dir, rel = "") {

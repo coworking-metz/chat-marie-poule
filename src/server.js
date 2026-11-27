@@ -9,6 +9,8 @@ try { process.loadEnvFile(".env"); } catch { /* variables déjà présentes dans
 const chatModule = await import(process.env.CHAT_STUB ? new URL(process.env.CHAT_STUB, `file://${process.cwd()}/`).href : "./chat.js");
 const { chat } = chatModule;
 const MODEL = chatModule.MODEL ?? "stub";
+const PROVIDER = chatModule.PROVIDER ?? "stub";
+const EXPOSE_USAGE = process.env.EXPOSE_USAGE === "1"; // banc d'essai (test/compare.mjs) : tokens et coût par question
 const { loadCorpus } = await import("./corpus.js");
 const { cleanMessages, rateLimited, pdfRateLimited, budgetExceeded, countQuestion, publicStats } = await import("./limits.js");
 const { createSessionStore } = await import("./sessions.js");
@@ -70,7 +72,7 @@ app.use((req, res, next) => {
 app.use(auth.attach);
 auth.mount(app);
 
-app.get("/api/health", (req, res) => res.json({ ok: true, model: MODEL, fiches: fiches.size, ...publicStats() }));
+app.get("/api/health", (req, res) => res.json({ ok: true, provider: PROVIDER, model: MODEL, fiches: fiches.size, ...publicStats() }));
 
 app.post("/api/chat", express.json({ limit: "64kb" }), async (req, res) => {
   const fail = (code, error) => res.status(code).json({ error });
@@ -119,6 +121,7 @@ app.post("/api/chat", express.json({ limit: "64kb" }), async (req, res) => {
     if (ev.type === "delta" || ev.type === "refused") { send("delta", { text: ev.text }); }
     else if (ev.type === "reset") { send("reset", {}); } // narration avant un outil : ce n'est pas la réponse
     else if (ev.type === "status") send("status", { text: ev.text });
+    else if (ev.type === "usage") { if (EXPOSE_USAGE) send("usage", { input: ev.input, output: ev.output, usd: ev.usd }); }
     else if (ev.type === "error") { ok = false; send("error", { text: ev.text }); }
     else if (ev.type === "done") send("done", user ? {} : { restantes });
   }
@@ -144,4 +147,4 @@ app.post("/api/pdf", express.json({ limit: "512kb" }), async (req, res) => {
 app.use(express.static(PUBLIC, { maxAge: "5m" }));
 app.use("/api", (req, res) => res.status(404).json({ error: "Introuvable." }));
 
-app.listen(PORT, () => console.log(`Marie-Poule écoute sur http://localhost:${PORT} (modèle ${MODEL}, ${fiches.size} fiches)`));
+app.listen(PORT, () => console.log(`Marie-Poule écoute sur http://localhost:${PORT} (${PROVIDER} / ${MODEL}, ${fiches.size} fiches)`));

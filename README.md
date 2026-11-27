@@ -8,12 +8,13 @@ npm install
 cp .env.example .env   # puis renseigner CLAUDE_API_KEY
 npm start            # http://localhost:3000
 npm test             # tests hors ligne (corpus, outils, validation, SSO PKCE avec faux fournisseur, limites) — sans coût
-npm run eval         # ~45 questions contre l'API : COÛT RÉEL (quelques centimes par question), serveur lancé
+npm run eval         # ~54 questions contre le serveur lancé : COÛT RÉEL (quelques centimes par question)
+npm run compare -- --url http://localhost:3100   # idem avec rapport détaillé par fournisseur (voir « Fournisseurs de modèles »)
 ```
 
 ## Fonctionnement
-- `POST /api/chat` `{messages:[{role,content}]}` → flux SSE (`delta`, `status`, `error`, `done`). `GET /api/health`.
-- Modèle `claude-opus-5-5`, effort `low`, streaming. Le prompt (`src/prompt.js`) = cadrage + `context/INDEX.md` (socle + catalogue), mis en cache (1 h). Les fiches arrivent à la demande via les outils `lire_fiche` et `chercher` (3 tours d'outils maximum par question).
+- `POST /api/chat` `{messages:[{role,content}]}` → flux SSE (`delta`, `status`, `error`, `done`). `GET /api/health` (renvoie aussi `provider` et `model`).
+- Fournisseur de modèle interchangeable (`PROVIDER`, voir plus bas) ; par défaut Anthropic, effort `low`, streaming. Le prompt (`src/prompt.js`) = cadrage + `context/INDEX.md` (socle + catalogue), mis en cache (1 h). Les fiches arrivent à la demande via les outils `lire_fiche` et `chercher` (3 tours d'outils maximum par question).
 - Refus de l'API (`stop_reason: "refusal"`) gérés ; repli serveur `fallbacks: "default"` activé (désactivable avec `FALLBACKS=off`).
 - Garde-fous : 8 questions/min/IP, question ≤ 1000 caractères, historique ≤ 10 messages, sortie ≤ 1500 tokens, plafond de dépense estimé par jour (`DAILY_BUDGET_USD`, 5 $ par défaut). Aucun journal des questions n'est tenu ; seuls des compteurs anonymes sont disponibles sur `/api/health`.
 - **Aucune conversation n'est conservée côté serveur** : pas de permalink, pas de stockage. L'historique vit dans le navigateur (variable + `sessionStorage` de l'onglet, pour survivre à un rechargement) et le client renvoie les derniers messages à chaque question. Le bouton « Télécharger la conversation (PDF) » (`POST /api/pdf` `{messages}`, 40 messages maximum, généré en mémoire avec `pdfkit`, rien d'écrit ni journalisé, débit `PDF_RATE_LIMIT_PER_MIN`, 30 par défaut) permet de la garder.
@@ -32,8 +33,23 @@ Variables : `SSO_ISSUER` (ex. `https://www.exemple.fr`), `SSO_CLIENT_ID`, `PUBLI
 
 **Enregistrer le client** auprès du fournisseur OAuth2 : type public (aucun secret), type de flux `authorization_code` (+ `refresh_token`), URI de redirection exactes `http://localhost:3000/auth/callback` (développement) et `${PUBLIC_URL}/auth/callback` (production), portée en lecture du profil. Le fournisseur doit accepter PKCE `S256` sans `client_secret`.
 
-## Variables d'environnement (`CLAUDE_API_KEY` et `MODEL` sont obligatoires, les autres facultatives)
-`CLAUDE_API_KEY`, `MODEL` (ex. `claude-opus-5-5`), `WORKSPACE_ID` (si la clé n'est pas rattachée à un espace de travail), `PORT`, `EFFORT` (low), `MAX_OUTPUT_TOKENS`, `RATE_LIMIT_PER_MIN`, `DAILY_BUDGET_USD`, `CORS_ORIGINS` (liste séparée par des virgules, pour intégrer au site), `TRUST_PROXY` (derrière Apache/nginx), `FALLBACKS=off`, `ANON_MAX_QUESTIONS`, `ANON_MAX_QUESTIONS_PER_IP_PER_DAY`, `PDF_RATE_LIMIT_PER_MIN`, `SSO_*`, `PUBLIC_URL`, `MEMBER_API_URL`, `SESSION_TTL_DAYS` (voir plus haut).
+## Fournisseurs de modèles
+`PROVIDER` choisit le fournisseur (`src/chat.js` délègue à `src/providers/`) :
+- `anthropic` (défaut) : API Anthropic, cache du préfixe, `EFFORT`, repli serveur `FALLBACKS`, blocs de réflexion, refus. Variables : `CLAUDE_API_KEY`, `MODEL` (ex. `claude-sonnet-5-5`), `WORKSPACE_ID`.
+- `openai-compatible` : tout serveur compatible OpenAI (`POST <LLM_BASE_URL>/chat/completions`, streaming SSE, appels de fonctions), en particulier **OVHcloud AI Endpoints** (modèles ouverts hébergés en France, facturation au token). Variables : `LLM_BASE_URL` (défaut `https://oai.endpoints.kepler.ai.cloud.ovh.net/v1`), `LLM_API_KEY` ou `OVH_AI_ENDPOINTS_ACCESS_TOKEN`, `MODEL` (identifiant exact du modèle, voir `GET <base>/models`), `LLM_TEMPERATURE` (0,2), `LLM_REASONING_EFFORT` (facultatif : `low`, pour gpt-oss…), `LLM_IDLE_TIMEOUT_MS` (45000, sans aucun octet reçu), `LLM_THINK_PREFIXED=1` (modèle qui n'émet que `</think>`), `MAX_OUTPUT_TOKENS` (1000 par défaut, borné à 4000). Le raisonnement du modèle (`<think>…</think>`, `reasoning_content`) n'est jamais affiché ; un `</think>` orphelin efface par `reset` le texte déjà émis. Les erreurs 429/5xx donnent les mêmes messages qu'avec Anthropic ; aucune nouvelle tentative automatique.
+- Coût et plafond `DAILY_BUDGET_USD` : `PRICE_INPUT_PER_M` / `PRICE_OUTPUT_PER_M` (USD par million de tokens ; défaut 2 / 10 = Sonnet 5.5, à adapter au modèle utilisé, ex. gpt-oss-120b ≈ 0,09 / 0,47). Cache Anthropic : lecture 0,05 x et écriture 1,25 x le prix d'entrée.
+
+**Essayer un modèle OVH sans toucher à la production** (serveur de test sur un autre port, variables passées en ligne de commande) :
+```
+curl -s -H "Authorization: Bearer $OVH_AI_ENDPOINTS_ACCESS_TOKEN" https://oai.endpoints.kepler.ai.cloud.ovh.net/v1/models | jq -r '.data[].id'
+PORT=3100 PROVIDER=openai-compatible MODEL=<id> OVH_AI_ENDPOINTS_ACCESS_TOKEN=... PRICE_INPUT_PER_M=0.09 PRICE_OUTPUT_PER_M=0.47 \
+  ANON_MAX_QUESTIONS_PER_IP_PER_DAY=1000 RATE_LIMIT_PER_MIN=1000 EXPOSE_USAGE=1 node src/server.js
+node test/compare.mjs --url http://localhost:3100 --label gpt-oss-120b
+```
+Faire de même pour Anthropic (`PORT=3101 MODEL=claude-sonnet-5-5 …`, sans `PROVIDER`) puis comparer : `node test/compare.mjs --diff test/rapports/<a>.json test/rapports/<b>.json`. `compare.mjs` pose les ~54 questions de `test/questions.json`, mesure réussite des vérifications grossières, longueur, liens (dont liens ancrés du règlement), refus, latence (1er token, total), tokens et coût estimé, et écrit un rapport JSON + Markdown dans `test/rapports/` (gitignoré). `EXPOSE_USAGE=1` (serveur de test uniquement) fait remonter l'usage par question. Les vérifications automatiques sont grossières : relire les réponses des rapports Markdown avant de conclure. Les tests hors ligne du fournisseur (faux serveur OpenAI : streaming, outils, JSON invalide, 429, 500, filtre de contenu, raisonnement) sont dans `test/providers.mjs`.
+
+## Variables d'environnement (`MODEL` est obligatoire, ainsi que `CLAUDE_API_KEY` avec `PROVIDER=anthropic` ; les autres sont facultatives)
+`PROVIDER`, `LLM_*`, `PRICE_*` (voir « Fournisseurs de modèles »), `CLAUDE_API_KEY`, `MODEL` (ex. `claude-sonnet-5-5`), `WORKSPACE_ID` (si la clé n'est pas rattachée à un espace de travail), `PORT`, `EFFORT` (low), `MAX_OUTPUT_TOKENS`, `RATE_LIMIT_PER_MIN`, `DAILY_BUDGET_USD`, `CORS_ORIGINS` (liste séparée par des virgules, pour intégrer au site), `TRUST_PROXY` (derrière Apache/nginx), `FALLBACKS=off`, `ANON_MAX_QUESTIONS`, `ANON_MAX_QUESTIONS_PER_IP_PER_DAY`, `PDF_RATE_LIMIT_PER_MIN`, `SSO_*`, `PUBLIC_URL`, `MEMBER_API_URL`, `SESSION_TTL_DAYS` (voir plus haut).
 
 ## Déploiement
 

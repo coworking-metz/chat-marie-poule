@@ -47,11 +47,26 @@ function roll() {
   const d = new Date().toISOString().slice(0, 10);
   if (stats.day !== d) Object.assign(stats, { day: d, usd: 0, questions: 0 });
 }
-// Tarifs claude-opus-5-5 ($/M tokens) : entrée 4, sortie 20, lecture cache 0,20, écriture cache 5.
-export function addUsage(u) {
+// Tarifs en USD par million de tokens, selon le modèle utilisé (PRICE_INPUT_PER_M / PRICE_OUTPUT_PER_M ;
+// défaut : Sonnet 5.5 = 2 / 10). Cache Anthropic : lecture 0,05 x et écriture 1,25 x le prix d'entrée
+// (ratios du calcul historique) ; les fournisseurs OpenAI-compatibles n'en déclarent pas (tout est compté en entrée).
+const priceNum = (v, d) => (v !== undefined && v !== "" && Number.isFinite(Number(v)) ? Number(v) : d);
+export const PRICE_INPUT = priceNum(process.env.PRICE_INPUT_PER_M, 2);
+export const PRICE_OUTPUT = priceNum(process.env.PRICE_OUTPUT_PER_M, 10);
+/** u = { input_tokens, output_tokens, cache_read_input_tokens, cache_creation_input_tokens } ; renvoie le coût estimé de cet appel. */
+export function usageCost(u = {}) {
+  return (
+    ((u.input_tokens ?? 0) * PRICE_INPUT + (u.output_tokens ?? 0) * PRICE_OUTPUT + (u.cache_read_input_tokens ?? 0) * PRICE_INPUT * 0.05 + (u.cache_creation_input_tokens ?? 0) * PRICE_INPUT * 1.25) /
+    1e6
+  );
+}
+/** Ajoute l'usage au compteur du jour ; renvoie { input, output, usd } pour cet appel. */
+export function addUsage(u = {}) {
   roll();
-  stats.usd +=
-    ((u.input_tokens ?? 0) * 4 + (u.output_tokens ?? 0) * 20 + (u.cache_read_input_tokens ?? 0) * 0.2 + (u.cache_creation_input_tokens ?? 0) * 5) / 1e6;
+  const usd = usageCost(u);
+  stats.usd += usd;
+  const input = (u.input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0);
+  return { input, output: u.output_tokens ?? 0, usd };
 }
 export function countQuestion() {
   roll();

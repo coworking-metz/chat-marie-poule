@@ -14,8 +14,9 @@
     "crawl": "python3 scripts/crawl-sitemap.py",
     "build:index": "node scripts/build-index.mjs",
     "dev": "node --watch src/server.js",
-    "test": "node test/unit.mjs && node test/server.mjs",
-    "eval": "node test/run.mjs"
+    "test": "node test/unit.mjs && node test/providers.mjs && node test/server.mjs",
+    "eval": "node test/run.mjs",
+    "compare": "node test/compare.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.14.0",

@@ -13,11 +13,11 @@ export const ANON_COOKIE = "mp_anon";
 const VISITOR_TTL_MS = 24 * 3600 * 1000;
 const MAX_VISITORS = 50_000;
 
-export const LIMIT_MESSAGE = `Vous avez posé toutes les questions que je peux traiter sans compte. Pour poursuivre, trois possibilités :
+export const LIMIT_MESSAGE = `Si vous voulez en avoir plus, vous pouvez :
 
 - Prendre rendez-vous pour une [journée d'essai gratuite](https://rejoindre.coworking-metz.fr/) : l'équipe répondra à toutes vos questions sur place.
-- Passer par le [chat de la page de contact](https://www.coworking-metz.fr/contact/#ouvrir-brevo) pour échanger avec une personne.
-- Vous connecter à votre compte coworker avec le bouton « Se connecter » en haut à droite de la page : vous pourrez alors continuer cette discussion.`;
+- [Nous contacter](https://www.coworking-metz.fr/contact/#ouvrir-brevo) via le chat de la page de contact pour échanger avec une personne.
+- Vous connecter avec votre compte adhérent-e pour continuer cette discussion (bouton « Se connecter » en haut de la page).`;
 
 /** Nombre de messages `user` d'un historique envoyé par le navigateur. */
 export const userMessages = (messages) => (Array.isArray(messages) ? messages : []).filter((m) => m?.role === "user").length;

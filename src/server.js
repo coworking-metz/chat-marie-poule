@@ -1,4 +1,5 @@
 import express from "express";
+import { resolveProfiles, profileFor, describe, publicConfig } from "./profiles.js";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -8,8 +9,9 @@ try { process.loadEnvFile(".env"); } catch { /* variables déjà présentes dans
 // CHAT_STUB : crochet réservé aux tests (remplace l'appel au modèle ; le corpus devient facultatif).
 const chatModule = await import(process.env.CHAT_STUB ? new URL(process.env.CHAT_STUB, `file://${process.cwd()}/`).href : "./chat.js");
 const { chat } = chatModule;
-const MODEL = chatModule.MODEL ?? "stub";
-const PROVIDER = chatModule.PROVIDER ?? "stub";
+const PROFILES = resolveProfiles(process.env); // mêmes profils que src/chat.js (lus dans la même configuration)
+if (process.env.CHAT_STUB) for (const p of [PROFILES.membre, PROFILES.anonyme]) if (p && !p.model) p.model = "stub";
+const PROVIDER = PROFILES.membre.provider, MODEL = PROFILES.membre.model;
 const EXPOSE_USAGE = process.env.EXPOSE_USAGE === "1"; // banc d'essai (test/compare.mjs) : tokens et coût par question
 const { loadCorpus } = await import("./corpus.js");
 const { cleanMessages, rateLimited, pdfRateLimited, budgetExceeded, countQuestion, publicStats } = await import("./limits.js");
@@ -72,9 +74,10 @@ app.use((req, res, next) => {
 app.use(auth.attach);
 auth.mount(app);
 
-// Informations affichées en bas de page : nom du modèle (MODEL_LABEL, sinon MODEL) et mention d'hébergement (MODEL_HOSTING, facultative :
-// à ne renseigner que si elle est vraie, par ex. « hébergé en France chez OVHcloud »).
-app.get("/api/config", (req, res) => res.json({ model: process.env.MODEL_LABEL || MODEL, hosting: process.env.MODEL_HOSTING || null }));
+// Informations affichées en bas de page : modèle du profil qui s'applique à la personne (connectée : profil membre ; sinon profil
+// anonyme, ou membre s'il n'y en a pas) : libellé (MODEL_LABEL / ANON_MODEL_LABEL, sinon l'identifiant) et mention d'hébergement
+// (MODEL_HOSTING / ANON_MODEL_HOSTING, facultative : à ne renseigner que si elle est vraie, par ex. « hébergé en France chez OVHcloud »).
+app.get("/api/config", (req, res) => res.json(publicConfig(profileFor(PROFILES, !!req.user))));
 
 // État de la limite anonyme (lu à partir du cookie du visiteur et de l'IP) : l'interface reste bloquée après un rechargement.
 app.get("/api/anon-status", (req, res) => {
@@ -82,7 +85,7 @@ app.get("/api/anon-status", (req, res) => {
   res.json({ limite: anonLimiter.limited(id, req.ip), message: anon.LIMIT_MESSAGE });
 });
 
-app.get("/api/health", (req, res) => res.json({ ok: true, provider: PROVIDER, model: MODEL, fiches: fiches.size, ...publicStats() }));
+app.get("/api/health", (req, res) => res.json({ ok: true, provider: PROVIDER, model: MODEL, profils: { membre: describe(PROFILES.membre), anonyme: describe(profileFor(PROFILES, false)), anonyme_distinct: !!PROFILES.anonyme }, fiches: fiches.size, ...publicStats() }));
 
 app.post("/api/chat", express.json({ limit: "64kb" }), async (req, res) => {
   const fail = (code, error) => res.status(code).json({ error });
@@ -127,7 +130,7 @@ app.post("/api/chat", express.json({ limit: "64kb" }), async (req, res) => {
   res.on("close", () => ctl.abort());
   const send = (event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
   let ok = true;
-  for await (const ev of chat(messages, ctl.signal, { memberBlock })) {
+  for await (const ev of chat(messages, ctl.signal, { memberBlock, connected: !!user })) {
     if (ev.type === "delta" || ev.type === "refused") { send("delta", { text: ev.text }); }
     else if (ev.type === "reset") { send("reset", {}); } // narration avant un outil : ce n'est pas la réponse
     else if (ev.type === "status") send("status", { text: ev.text });
@@ -157,4 +160,4 @@ app.post("/api/pdf", express.json({ limit: "512kb" }), async (req, res) => {
 app.use(express.static(PUBLIC, { maxAge: "5m" }));
 app.use("/api", (req, res) => res.status(404).json({ error: "Introuvable." }));
 
-app.listen(PORT, () => console.log(`Marie-Poule écoute sur http://localhost:${PORT} (${PROVIDER} / ${MODEL}, ${fiches.size} fiches)`));
+app.listen(PORT, () => console.log(`Marie-Poule écoute sur http://localhost:${PORT} (membre : ${PROVIDER} / ${MODEL}${PROFILES.anonyme ? `; anonyme : ${PROFILES.anonyme.provider} / ${PROFILES.anonyme.model}` : ""}, ${fiches.size} fiches)`));

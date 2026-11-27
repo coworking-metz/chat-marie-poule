@@ -44,15 +44,24 @@ Un agent relit tous les résumés et :
 1. ajoute à chaque fiche `resume` et `utile_pour` dans son en-tête (si absents) ;
 2. écrit des **fiches de synthèse thématiques** : tarifs et abonnements, fonctionnement et règles, espace et services, histoire et chiffres clés, gouvernance, finances, fréquentation, FAQ pratique… (information **la plus récente d'abord**, ancienne information datée) ;
 3. rédige le **socle** (≈ 4 000 à 6 000 tokens : présentation, tarifs actuels, horaires et accès, règles essentielles, comment venir essayer, chiffres clés, liens) ;
-4. génère `context/INDEX.md` = cadrage éditorial court + socle + **catalogue** (chemin, titre, période, résumé, « à charger quand… ») puis `npm run build:index` (génère `context/_TRACE.md` : traçabilité fusionnée des index d'agents, non lue par l'IA ; `INDEX.md` reste le parent rédigé).
+4. génère `context/INDEX.md` = en-tête d'une phrase + socle + **catalogue** (3 colonnes : `chemin` exact | `résumé` | `à charger quand…`) + « Points à confirmer » + consignes en 2 lignes, **dans le budget de taille ci-dessous**, puis `npm run build:index` (génère `context/_TRACE.md` : traçabilité fusionnée des index d'agents, non lue par l'IA ; `INDEX.md` reste le parent rédigé).
 
 Les fichiers et dossiers qui commencent par `_` (`_SPEC.md`, `_index/`) ne font pas partie du corpus de l'IA.
+
+**Budget de taille de `INDEX.md` (obligatoire).** Ce fichier est envoyé avec le prompt à CHAQUE question : chaque token coûte à chaque appel (l'allègement de nov. 2026 a fait passer le préfixe de ≈ 18 500 à ≈ 12 100 tokens, soit −34 %). Une reconstruction ne doit pas le regonfler :
+- `INDEX.md` entier : **≤ 9 500 tokens** (≈ 29 000 caractères, ratio mesuré ≈ 3,1 caractères/token) ; le socle vise ≈ 3 500 tokens, le catalogue ≈ 4 500.
+- Ligne de catalogue : `résumé` **≤ 160 caractères**, `à charger quand…` **≤ 120 caractères** (mots-clés essentiels, pas de liste exhaustive), pas de colonne titre ni période (le chemin et le résumé suffisent), une ligne par fiche, chemin exact.
+- Pas de redite : un fait du socle n'est pas répété dans le catalogue ni dans « Points à confirmer » ; ne garder dans ce dernier que les divergences qui changent une réponse courante (les autres restent dans les fiches). « Consignes d'usage » : 2 à 3 lignes (le prompt système porte déjà les règles).
+- Exemple de ligne conforme (144 caractères de résumé) :
+  `| `themes/tarifs-et-abonnements.md` | Tarifs en vigueur (boutique, nov. 2026) : 80 €, réduit 60 €, résident 50 €, nomade 15 €, adhésion 10 € ; historique depuis 2016. | prix, tarif étudiant ou demandeur d'emploi, résident, nomade, ancien tarif |`
+- `npm run check:context` échoue si ces limites sont dépassées (taille de `INDEX.md`, longueur des champs, fiche absente du catalogue ou chemin sans fiche). Ne pas relever les seuils sans décision du responsable ; mesurer le coût réel avec une question sans outil (champ `usage.prompt_tokens` du fournisseur).
+
 
 ### 5. Contrôler
 ```
 npm run check:context
 ```
-Vérifie : en-têtes valides, **chaque source (docs et pages web) citée dans un index**, taille estimée en tokens, absence d'e-mails (hors `contact@coworking-metz.fr`), téléphones, IBAN, numéros de sécu. Corriger jusqu'à « Tout est conforme ». Relire ensuite à la main un échantillon (chiffres clés, tarifs actuels, règles).
+Vérifie : en-têtes valides, **budget de taille de `INDEX.md` et longueur des lignes de catalogue**, **chaque source (docs et pages web) citée dans un index**, taille estimée en tokens, absence d'e-mails (hors `contact@coworking-metz.fr`), téléphones, IBAN, numéros de sécu. Corriger jusqu'à « Tout est conforme ». Relire ensuite à la main un échantillon (chiffres clés, tarifs actuels, règles).
 
 ### 6. Valider avec le responsable du projet
 Présenter : décompte des sources (intégrées / non reprises / illisibles), liste des **contradictions et doutes** remontés par les agents (ils les signalent dans leur rapport), sources inaccessibles (demander un export). Ne rien publier avant accord.

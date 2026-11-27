@@ -67,7 +67,8 @@ const sso = http.createServer(async (req, res) => {
 // ---- Serveur de l'application ----
 const env = { ...process.env, PORT: String(PORT), CHAT_STUB: "test/stub-chat.mjs", SESSIONS_DIR: path.join(tmp, "sess"), ANON_FILE: path.join(tmp, "anon.json"), ANON_MAX_QUESTIONS_PER_IP_PER_DAY: "12",
   SSO_ISSUER: SSO, SSO_CLIENT_ID: "marie-poule", PUBLIC_URL: BASE, MEMBER_API_URL: `${SSO}/api-json-wp/cowo/v1/me/summary`,
-  ANON_MAX_QUESTIONS: "5", RATE_LIMIT_PER_MIN: "1000", MODEL: "stub" };
+  ANON_MAX_QUESTIONS: "5", RATE_LIMIT_PER_MIN: "1000", MODEL: "stub",
+  MODEL_LABEL: "Modèle membre", MODEL_HOSTING: "hébergement membre", ANON_MODEL: "stub-anon", ANON_MODEL_LABEL: "Modèle anonyme" };
 const child = spawn(process.execPath, ["src/server.js"], { env, stdio: ["ignore", "pipe", "pipe"], cwd: new URL("..", import.meta.url).pathname });
 let logs = ""; child.stdout.on("data", (d) => (logs += d)); child.stderr.on("data", (d) => (logs += d));
 for (let i = 0; i < 60; i++) { try { if ((await fetch(`${BASE}/api/health`)).ok) break; } catch {} await new Promise((r) => setTimeout(r, 100)); }
@@ -147,6 +148,13 @@ try {
   assert.match(cb.headers.getSetCookie().find((c) => c.startsWith("mp_sid=")), /HttpOnly; SameSite=Lax/);
   const me = await (await call(j3, "/api/me")).json();
   assert.deepEqual(me, { sso: true, connecte: true, nom: "Camille D." });
+  // profils : pied de page et routage selon la session (membre connecté -> profil membre ; sinon profil anonyme)
+  assert.deepEqual(await (await call(j3, "/api/config")).json(), { model: "Modèle membre", hosting: "hébergement membre" });
+  assert.deepEqual(await (await call(jar(), "/api/config")).json(), { model: "Modèle anonyme", hosting: null }, "pas de mention d'hébergement sans ANON_MODEL_HOSTING");
+  const health = await (await call(jar(), "/api/health")).json();
+  assert.deepEqual(health.profils, { membre: { provider: "anthropic", model: "stub" }, anonyme: { provider: "anthropic", model: "stub-anon" }, anonyme_distinct: true });
+  assert.ok(!JSON.stringify(health).match(/key|token|cle/i), "aucune clé dans /api/health");
+  assert.ok((await events(await ask(j3, [], "PROFIL?"))).some(([e, d]) => e === "delta" && d.text === "connected=true"));
   assert.ok(!JSON.stringify(me).includes("example.org"));
   // ---------- Connecté : plus de limite, contexte transmis, rien de conservé ----------
   let ctxText = "", h = [];

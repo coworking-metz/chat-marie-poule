@@ -51,6 +51,10 @@ export function nombreFiches() {
   return corpus().fiches.size;
 }
 
+// Plafond de taille d'une fiche renvoyée au modèle (les fiches actuelles font au plus ~15 000 caractères) ; le règlement intérieur n'est jamais tronqué.
+export const MAX_FICHE_CHARS = Number(process.env.MAX_FICHE_CHARS) || 40000;
+const SANS_PLAFOND = new Set(["sources-web/reglement-interieur.md"]);
+
 /** lire_fiche : renvoie le texte d'une fiche (chemin relatif à context/, tel qu'écrit dans le catalogue). */
 export function lireFiche(chemin) {
   const clean = String(chemin ?? "").trim().replace(/^`|`$/g, "").replace(/^context\//, "");
@@ -59,7 +63,11 @@ export function lireFiche(chemin) {
     return { ok: false, texte: `Fiche introuvable : « ${clean.slice(0, 120)} ». Utilise un chemin exact du catalogue (ex. themes/tarifs-et-abonnements.md) ou l'outil chercher.` };
   }
   const src = f.urls.length ? `Pages du site sources de cette fiche (à citer en lien Markdown) : ${f.urls.join(" ; ")}\n` : "";
-  return { ok: true, texte: `# ${f.titre}\n(fiche : ${f.path})\n${src}\n${f.body}` };
+  let body = f.body.replace(/\n{3,}/g, "\n\n").trim();
+  if (body.length > MAX_FICHE_CHARS && !SANS_PLAFOND.has(f.path)) {
+    body = `${body.slice(0, body.lastIndexOf("\n", MAX_FICHE_CHARS) > 0 ? body.lastIndexOf("\n", MAX_FICHE_CHARS) : MAX_FICHE_CHARS)}\n\n(fiche tronquée à ${MAX_FICHE_CHARS} caractères ; utilise chercher pour une information précise de la suite.)`;
+  }
+  return { ok: true, texte: `# ${f.titre}\n(fiche : ${f.path})\n${src}\n${body}` };
 }
 
 /** chercher : classe les fiches par nombre d'occurrences des mots et renvoie des extraits. */

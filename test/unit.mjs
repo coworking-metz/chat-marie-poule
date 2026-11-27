@@ -22,6 +22,11 @@ if (corpusPresent) {
   assert.ok(chemins.length > 30);
   for (const c of new Set(chemins)) assert.equal(lireFiche(c).ok, true, `fiche du catalogue introuvable : ${c}`);
 
+  // lire_fiche : pas de bruit (en-tête YAML retiré, lignes vides repliées), règlement jamais tronqué
+  const t = lireFiche("themes/tarifs-et-abonnements.md").texte;
+  assert.ok(!t.includes("\nresume:") && !t.includes("\nutile_pour:") && !/\n{3,}/.test(t));
+  assert.ok(lireFiche("sources-web/reglement-interieur.md").texte.length > 10000 && !lireFiche("sources-web/reglement-interieur.md").texte.includes("fiche tronquée"));
+
   // chercher
   assert.ok(chercher("tarifs abonnement").texte.includes("tarifs"));
   assert.equal(chercher("").ok, false);

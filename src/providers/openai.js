@@ -4,16 +4,7 @@ import { REFUS_TYPE, systemPrompt } from "../prompt.js";
 import { addUsage } from "../limits.js";
 import { MAX_TOOL_ROUNDS, LABEL, TRUNCATED_TEXT, TOOL_DEFS, execTool, errorText } from "./common.js";
 
-const MODEL = process.env.MODEL;
-const BASE_URL = (process.env.LLM_BASE_URL || "https://oai.endpoints.kepler.ai.cloud.ovh.net/v1").replace(/\/+$/, "");
-const API_KEY = process.env.LLM_API_KEY || process.env.OVH_AI_ENDPOINTS_ACCESS_TOKEN || "";
-const MAX_TOKENS = Math.min(Math.max(Number(process.env.MAX_OUTPUT_TOKENS) || 1000, 16), 4000);
-const TEMPERATURE = process.env.LLM_TEMPERATURE !== undefined && process.env.LLM_TEMPERATURE !== "" ? Number(process.env.LLM_TEMPERATURE) : 0.2;
-const REASONING_EFFORT = process.env.LLM_REASONING_EFFORT || ""; // facultatif (low|medium|high) : gpt-oss, etc.
 const IDLE_TIMEOUT_MS = Number(process.env.LLM_IDLE_TIMEOUT_MS) || 45_000; // sans aucun octet reçu
-const THINK_PREFIXED = process.env.LLM_THINK_PREFIXED === "1"; // le modèle n'émet que « </think> » (balise ouvrante dans son gabarit)
-
-if (!API_KEY && BASE_URL.includes("ovh.net")) console.error("[chat] LLM_API_KEY / OVH_AI_ENDPOINTS_ACCESS_TOKEN absent : les appels à OVH échoueront.");
 
 const TOOLS = TOOL_DEFS.map((t) => ({ type: "function", function: { name: t.name, description: t.description, parameters: t.parameters } }));
 
@@ -99,7 +90,7 @@ async function* sseJson(body, bump) {
 }
 
 /** Un tour de modèle : renvoie { text, toolCalls, finish, usage } en émettant les fragments de texte visibles via `emit`. */
-async function* turn(messages, round, signal) {
+async function* turn(cfg, messages, round, signal) {
   const ctl = new AbortController();
   const onAbort = () => ctl.abort();
   signal?.addEventListener("abort", onAbort, { once: true });
@@ -107,26 +98,26 @@ async function* turn(messages, round, signal) {
   const bump = () => { clearTimeout(timer); timer = setTimeout(() => ctl.abort(new Error("délai dépassé")), IDLE_TIMEOUT_MS); };
   bump();
   try {
-    const res = await fetch(`${BASE_URL}/chat/completions`, {
+    const res = await fetch(`${cfg.baseUrl}/chat/completions`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "text/event-stream", ...(API_KEY ? { Authorization: `Bearer ${API_KEY}` } : {}) },
+      headers: { "Content-Type": "application/json", Accept: "text/event-stream", ...(cfg.apiKey ? { Authorization: `Bearer ${cfg.apiKey}` } : {}) },
       body: JSON.stringify({
-        model: MODEL,
+        model: cfg.model,
         messages,
         stream: true,
         stream_options: { include_usage: true },
-        max_tokens: MAX_TOKENS,
-        temperature: TEMPERATURE,
+        max_tokens: cfg.maxTokens,
+        temperature: cfg.temperature,
         tools: TOOLS,
         tool_choice: round < MAX_TOOL_ROUNDS ? "auto" : "none",
-        ...(REASONING_EFFORT ? { reasoning_effort: REASONING_EFFORT } : {}),
+        ...(cfg.reasoningEffort ? { reasoning_effort: cfg.reasoningEffort } : {}),
       }),
       signal: ctl.signal,
     });
     if (!res.ok) throw new HttpError(res.status, (await res.text().catch(() => "")).slice(0, 150));
     bump();
 
-    const filter = createThinkFilter({ startInThink: THINK_PREFIXED });
+    const filter = createThinkFilter({ startInThink: cfg.thinkPrefixed });
     const calls = []; // fragments d'appels d'outils accumulés par index
     let text = "", finish = null, usage = null, started = false;
     const lead = (v) => { if (started) return v; v = v.replace(/^\s+/, ""); if (v) started = true; return v; }; // pas d'espaces en tête de réponse
@@ -171,58 +162,67 @@ function parseArgs(raw) {
   return { erreur: "Arguments invalides : un objet JSON est attendu (ex. {\"chemin\": \"themes/tarifs-et-abonnements.md\"}). Réessayez avec des arguments valides." };
 }
 
-export async function* run(history, signal, { memberBlock } = {}) {
-  // Un seul message système (certains gabarits de modèles refusent plusieurs messages « system ») ;
-  // le contexte du membre vient en dernier pour que le préfixe reste identique pour tous.
-  const system = systemPrompt() + (memberBlock ? `\n\n${memberBlock}` : "");
-  const messages = [{ role: "system", content: system }, ...history.map((m) => ({ role: m.role, content: m.content }))];
-  try {
-    for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
-      const it = turn(messages, round, signal);
-      let r;
-      for (;;) {
-        const n = await it.next();
-        if (n.done) { r = n.value; break; }
-        yield n.value;
-      }
-      if (r.usage) {
-        const p = r.usage.prompt_tokens ?? 0, c = r.usage.completion_tokens ?? 0;
-        yield { type: "usage", ...addUsage({ input_tokens: p, output_tokens: c }) };
-      }
+/** Exécuteur pour un profil (src/profiles.js) : renvoie `run(history, signal, { memberBlock })`. */
+export function createRunner(profile) {
+  const cfg = {
+    ...profile,
+    maxTokens: Math.min(Math.max(profile.maxTokens || 1000, 16), 4000),
+  };
+  if (!cfg.apiKey && cfg.baseUrl.includes("ovh.net")) console.error(`[chat] clé d'API absente (profil ${profile.name}) : les appels à OVH échoueront.`);
+  const price = profile.price;
+  return async function* run(history, signal, { memberBlock } = {}) {
+    // Un seul message système (certains gabarits de modèles refusent plusieurs messages « system ») ;
+    // le contexte du membre vient en dernier pour que le préfixe reste identique pour tous.
+    const system = systemPrompt() + (memberBlock ? `\n\n${memberBlock}` : "");
+    const messages = [{ role: "system", content: system }, ...history.map((m) => ({ role: m.role, content: m.content }))];
+    try {
+      for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
+        const it = turn(cfg, messages, round, signal);
+        let r;
+        for (;;) {
+          const n = await it.next();
+          if (n.done) { r = n.value; break; }
+          yield n.value;
+        }
+        if (r.usage) {
+          const p = r.usage.prompt_tokens ?? 0, c = r.usage.completion_tokens ?? 0;
+          yield { type: "usage", ...addUsage({ input_tokens: p, output_tokens: c }, price) };
+        }
 
-      if (r.finish === "content_filter") {
-        yield { type: "refused", text: REFUS_TYPE };
-        yield { type: "done" };
-        return;
+        if (r.finish === "content_filter") {
+          yield { type: "refused", text: REFUS_TYPE };
+          yield { type: "done" };
+          return;
+        }
+        if (r.finish === "length") {
+          yield { type: "delta", text: TRUNCATED_TEXT };
+          yield { type: "done" };
+          return;
+        }
+        if (!r.toolCalls.length || round >= MAX_TOOL_ROUNDS) {
+          yield { type: "done" };
+          return;
+        }
+        const calls = r.toolCalls.map((c, i) => ({ ...c, id: c.id || `call_${round}_${i}`, parsed: parseArgs(c.args) }));
+        messages.push({
+          role: "assistant",
+          content: r.text || null,
+          tool_calls: calls.map((c) => ({ id: c.id, type: "function", function: { name: c.name, arguments: c.parsed.input ? JSON.stringify(c.parsed.input) : "{}" } })),
+        });
+        // Le texte de ce tour (narration avant l'outil) n'est pas la réponse : le client doit l'effacer.
+        if (r.text) yield { type: "reset" };
+        yield { type: "status", text: LABEL[calls[0].name] ?? "Consultation…" };
+        for (const c of calls) {
+          const out = c.parsed.erreur ? { ok: false, texte: c.parsed.erreur } : execTool(c.name, c.parsed.input);
+          messages.push({ role: "tool", tool_call_id: c.id, name: c.name, content: out.ok ? out.texte : `Erreur : ${out.texte}` });
+        }
       }
-      if (r.finish === "length") {
-        yield { type: "delta", text: TRUNCATED_TEXT };
-        yield { type: "done" };
-        return;
-      }
-      if (!r.toolCalls.length || round >= MAX_TOOL_ROUNDS) {
-        yield { type: "done" };
-        return;
-      }
-      const calls = r.toolCalls.map((c, i) => ({ ...c, id: c.id || `call_${round}_${i}`, parsed: parseArgs(c.args) }));
-      messages.push({
-        role: "assistant",
-        content: r.text || null,
-        tool_calls: calls.map((c) => ({ id: c.id, type: "function", function: { name: c.name, arguments: c.parsed.input ? JSON.stringify(c.parsed.input) : "{}" } })),
-      });
-      // Le texte de ce tour (narration avant l'outil) n'est pas la réponse : le client doit l'effacer.
-      if (r.text) yield { type: "reset" };
-      yield { type: "status", text: LABEL[calls[0].name] ?? "Consultation…" };
-      for (const c of calls) {
-        const out = c.parsed.erreur ? { ok: false, texte: c.parsed.erreur } : execTool(c.name, c.parsed.input);
-        messages.push({ role: "tool", tool_call_id: c.id, name: c.name, content: out.ok ? out.texte : `Erreur : ${out.texte}` });
-      }
+      yield { type: "done" };
+    } catch (e) {
+      if (signal?.aborted) return;
+      const status = e instanceof HttpError ? e.status : undefined;
+      console.error("[chat] erreur API", status ?? "", e?.constructor?.name, String(e?.message ?? "").slice(0, 200));
+      yield { type: "error", text: errorText(status) };
     }
-    yield { type: "done" };
-  } catch (e) {
-    if (signal?.aborted) return;
-    const status = e instanceof HttpError ? e.status : undefined;
-    console.error("[chat] erreur API", status ?? "", e?.constructor?.name, String(e?.message ?? "").slice(0, 200));
-    yield { type: "error", text: errorText(status) };
-  }
+  };
 }

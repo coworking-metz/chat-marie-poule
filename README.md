@@ -34,6 +34,20 @@ Variables : `SSO_ISSUER` (ex. `https://www.exemple.fr`), `SSO_CLIENT_ID`, `PUBLI
 ## Variables d'environnement (`CLAUDE_API_KEY` et `MODEL` sont obligatoires, les autres facultatives)
 `CLAUDE_API_KEY`, `MODEL` (ex. `claude-opus-5-5`), `WORKSPACE_ID` (si la clé n'est pas rattachée à un espace de travail), `PORT`, `EFFORT` (low), `MAX_OUTPUT_TOKENS`, `RATE_LIMIT_PER_MIN`, `DAILY_BUDGET_USD`, `CORS_ORIGINS` (liste séparée par des virgules, pour intégrer au site), `TRUST_PROXY` (derrière Apache/nginx), `FALLBACKS=off`, `ANON_MAX_QUESTIONS`, `ANON_MAX_QUESTIONS_PER_IP_PER_DAY`, `PDF_RATE_LIMIT_PER_MIN`, `SSO_*`, `PUBLIC_URL`, `MEMBER_API_URL`, `SESSION_TTL_DAYS` (voir plus haut).
 
+## Déploiement
+
+Node >= 22, un seul process. Exemple avec pm2 et Apache (ou nginx) ; modèles dans `deploy/`.
+
+```
+git clone https://github.com/coworking-metz/chat-marie-poule.git && cd chat-marie-poule
+npm ci --omit=dev
+# copier .env (voir .env.example : PORT, PUBLIC_URL en https, NODE_ENV=production, TRUST_PROXY) et le dossier context/
+MP_NODE=/chemin/vers/node22 pm2 start deploy/ecosystem.config.cjs && pm2 save
+curl http://127.0.0.1:<PORT>/api/health
+```
+
+Reverse proxy : `deploy/apache-vhost.conf.example` ou `deploy/nginx-vhost.conf.example` (proxy vers `127.0.0.1:<PORT>`, **sans tampon pour le flux SSE** de `/api/chat`, délai de lecture >= 120 s, corps limité à 64 Ko, HTTPS Let's Encrypt). `TRUST_PROXY` doit refléter le nombre de proxys devant l'app (sinon la limite par IP est faussée). Mise à jour : `git pull && npm ci --omit=dev && pm2 restart marie-poule`.
+
 ## Corpus
 Le dossier `context/` (fiches résumées issues des documents et du site de l'association) **n'est pas publié** dans ce dépôt, ni les sources brutes `docs/` et `extracted/`. Sans `context/INDEX.md`, le serveur refuse de démarrer (message explicite) et `npm test` saute les tests dépendant du corpus.
 

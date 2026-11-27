@@ -1,0 +1,29 @@
+# Modèle de reverse proxy Apache (modules : proxy, proxy_http, headers, rewrite, ssl).
+# Remplacer chat.exemple.fr et le port (PORT du .env). À placer dans sites-available, puis :
+#   a2ensite chat.exemple.fr && apache2ctl configtest && systemctl reload apache2
+#   certbot --apache -d chat.exemple.fr      # ajoute le vhost :443 et la redirection
+<VirtualHost *:80>
+    ServerName chat.exemple.fr
+    ErrorLog ${APACHE_LOG_DIR}/marie-poule-error.log
+    CustomLog ${APACHE_LOG_DIR}/marie-poule-access.log combined
+
+    ProxyRequests Off
+    ProxyPreserveHost On
+    ProxyPass /.well-known/acme-challenge !
+
+    # Flux SSE de /api/chat : pas de mise en tampon, lecture longue
+    ProxyPass / http://127.0.0.1:3011/ flushpackets=on timeout=180 disablereuse=on
+    ProxyPassReverse / http://127.0.0.1:3011/
+    ProxyTimeout 180
+
+    # Corps de requête limité (historique de conversation)
+    LimitRequestBody 65536
+
+    RequestHeader set X-Forwarded-Proto "http"
+    # X-Forwarded-For et X-Forwarded-Host sont ajoutés par mod_proxy.
+    # Derrière Cloudflare + Apache : TRUST_PROXY=2 dans .env ; derrière Apache seul : TRUST_PROXY=1.
+</VirtualHost>
+
+# Vhost :443 (après certbot) : même bloc que ci-dessus avec
+#   RequestHeader set X-Forwarded-Proto "https"
+#   SSLCertificateFile / SSLCertificateKeyFile / Include options-ssl-apache.conf (écrits par certbot)

@@ -1,0 +1,29 @@
+{
+  "name": "chat-marie-poule",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Marie-Poule : assistante IA du Coworking Metz (frontend + API Node)",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "extract": "python3 scripts/extract.py",
+    "check:context": "node scripts/check-context.mjs",
+    "crawl": "python3 scripts/crawl-sitemap.py",
+    "build:index": "node scripts/build-index.mjs",
+    "dev": "node --watch src/server.js",
+    "test": "node test/unit.mjs",
+    "eval": "node test/run.mjs"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.14.0",
+    "express": "^5.3.0"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/coworking-metz/chat-marie-poule.git"
+  }
+}

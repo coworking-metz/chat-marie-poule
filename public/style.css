@@ -1,0 +1,71 @@
+:root {
+  --jaune: #eab234;
+  --jaune-fonce: #c9921a;
+  --encre: #1a1e26;
+  --creme: #f6f4ef;
+  --blanc: #fff;
+  --gris: #6b7080;
+  --bord: #e4e0d6;
+  --rayon: 20px;
+  --ombre: 0 8px 28px rgba(26, 30, 38, .08);
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; min-height: 100dvh; background: var(--creme); color: var(--encre);
+  font: 400 16px/1.55 Poppins, system-ui, sans-serif;
+}
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+a { color: var(--encre); text-decoration-color: var(--jaune); text-decoration-thickness: 2px; text-underline-offset: 3px; }
+a:hover { background: var(--jaune); }
+:focus-visible { outline: 3px solid var(--encre); outline-offset: 2px; }
+
+.app { max-width: 760px; min-height: 100dvh; margin: 0 auto; padding: 20px 16px 16px; display: flex; flex-direction: column; gap: 18px; }
+.brand img { display: block; height: 52px; width: auto; }
+
+.hero { margin: auto 0; text-align: center; padding: 16px 0 8px; }
+.hero h1 { margin: 0 0 12px; font-size: clamp(1.7rem, 5.5vw, 2.6rem); line-height: 1.15; font-weight: 700; }
+.hl { background: linear-gradient(transparent 62%, var(--jaune) 62%); padding: 0 .15em; }
+.lead { margin: 0 auto 22px; max-width: 34em; color: var(--gris); }
+.suggestions { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+.chip {
+  font: 500 .92rem Poppins, sans-serif; padding: 10px 16px; border-radius: 999px; cursor: pointer;
+  background: var(--blanc); color: var(--encre); border: 1.5px solid var(--bord); transition: .15s;
+}
+.chip:hover { border-color: var(--jaune); background: #fff8e4; transform: translateY(-1px); }
+
+.log { display: none; flex: 1; flex-direction: column; gap: 14px; padding-bottom: 8px; }
+.app[data-state="chat"] .log { display: flex; }
+.app[data-state="chat"] .hero { display: none; }
+.msg { max-width: 88%; padding: 12px 16px; border-radius: var(--rayon); box-shadow: var(--ombre); overflow-wrap: anywhere; }
+.msg p { margin: 0 0 .6em; } .msg p:last-child { margin-bottom: 0; }
+.msg ul { margin: .3em 0 .6em; padding-left: 1.2em; } .msg li { margin: .15em 0; }
+.msg.user { align-self: flex-end; background: var(--encre); color: var(--creme); border-bottom-right-radius: 6px; }
+.msg.bot { align-self: flex-start; background: var(--blanc); border-bottom-left-radius: 6px; border: 1px solid var(--bord); }
+.msg.bot.error { border-color: #d9534f; }
+.status { align-self: flex-start; color: var(--gris); font-size: .88rem; padding-left: 6px; }
+.dots span { display: inline-block; width: 7px; height: 7px; margin-right: 4px; border-radius: 50%; background: var(--jaune); animation: b 1s infinite ease-in-out; }
+.dots span:nth-child(2) { animation-delay: .15s; } .dots span:nth-child(3) { animation-delay: .3s; }
+@keyframes b { 0%, 80%, 100% { transform: scale(.6); opacity: .5; } 40% { transform: scale(1); opacity: 1; } }
+
+.composer {
+  position: sticky; bottom: 0; display: flex; gap: 10px; align-items: flex-end; padding: 8px 8px 8px 18px;
+  background: var(--blanc); border: 2px solid var(--bord); border-radius: 28px; box-shadow: var(--ombre);
+}
+.composer:focus-within { border-color: var(--jaune); }
+.composer textarea {
+  flex: 1; resize: none; border: 0; outline: 0; background: transparent; padding: 10px 0; max-height: 9em;
+  font: 400 1rem/1.4 Poppins, sans-serif; color: var(--encre);
+}
+.send {
+  font: 600 .95rem Poppins, sans-serif; border: 0; cursor: pointer; padding: 12px 22px; border-radius: 999px;
+  background: var(--jaune); color: var(--encre); transition: background .15s;
+}
+.send:hover { background: var(--jaune-fonce); }
+.send:disabled { opacity: .5; cursor: not-allowed; }
+
+.foot { text-align: center; font-size: .8rem; color: var(--gris); }
+.foot p { margin: 4px 0 8px; }
+.reset { font: 500 .85rem Poppins, sans-serif; background: none; border: 1.5px solid var(--bord); border-radius: 999px; padding: 6px 14px; cursor: pointer; color: var(--encre); }
+.reset:hover { border-color: var(--jaune); background: #fff8e4; }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }

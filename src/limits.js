@@ -1,0 +1,65 @@
+// Garde-fous : taille des entrées, débit par IP, plafond de dépense quotidien. Aucun texte de question n'est conservé.
+export const MAX_QUESTION_CHARS = Number(process.env.MAX_QUESTION_CHARS) || 1000;
+export const MAX_HISTORY_MESSAGES = Number(process.env.MAX_HISTORY_MESSAGES) || 10;
+const MAX_HISTORY_CHARS = 4000; // par message d'historique (réponse de l'assistant)
+const RATE_LIMIT = Number(process.env.RATE_LIMIT_PER_MIN) || 8;
+const DAILY_BUDGET_USD = Number(process.env.DAILY_BUDGET_USD) || 5;
+
+/** Valide et nettoie l'historique envoyé par le navigateur (donnée non fiable). */
+export function cleanMessages(input) {
+  if (!Array.isArray(input) || input.length === 0) return { error: "Aucun message." };
+  const msgs = input.slice(-MAX_HISTORY_MESSAGES).map((m) => ({
+    role: m?.role === "assistant" ? "assistant" : "user",
+    content: typeof m?.content === "string" ? m.content.trim() : "",
+  }));
+  while (msgs.length && msgs[0].role !== "user") msgs.shift();
+  const last = msgs.at(-1);
+  if (!last || last.role !== "user" || !last.content) return { error: "La dernière entrée doit être une question." };
+  if (last.content.length > MAX_QUESTION_CHARS) return { error: `Question trop longue (${MAX_QUESTION_CHARS} caractères maximum).` };
+  for (const m of msgs) {
+    if (!m.content) return { error: "Message vide." };
+    m.content = m.content.slice(0, m.role === "user" ? MAX_QUESTION_CHARS : MAX_HISTORY_CHARS);
+  }
+  // Alternance stricte : on fusionne les rôles consécutifs identiques.
+  const out = [];
+  for (const m of msgs) {
+    if (out.at(-1)?.role === m.role) out.at(-1).content += `\n${m.content}`;
+    else out.push({ ...m });
+  }
+  return { messages: out };
+}
+
+const hits = new Map();
+export function rateLimited(ip) {
+  const now = Date.now();
+  const arr = (hits.get(ip) ?? []).filter((t) => now - t < 60_000);
+  arr.push(now);
+  hits.set(ip, arr);
+  if (hits.size > 5000) for (const [k, v] of hits) if (!v.some((t) => now - t < 60_000)) hits.delete(k);
+  return arr.length > RATE_LIMIT;
+}
+
+// Compteurs anonymes (RGPD) : dépense estimée du jour, nombre de questions.
+const stats = { day: "", usd: 0, questions: 0 };
+function roll() {
+  const d = new Date().toISOString().slice(0, 10);
+  if (stats.day !== d) Object.assign(stats, { day: d, usd: 0, questions: 0 });
+}
+// Tarifs claude-opus-5-5 ($/M tokens) : entrée 4, sortie 20, lecture cache 0,20, écriture cache 5.
+export function addUsage(u) {
+  roll();
+  stats.usd +=
+    ((u.input_tokens ?? 0) * 4 + (u.output_tokens ?? 0) * 20 + (u.cache_read_input_tokens ?? 0) * 0.2 + (u.cache_creation_input_tokens ?? 0) * 5) / 1e6;
+}
+export function countQuestion() {
+  roll();
+  stats.questions++;
+}
+export function budgetExceeded() {
+  roll();
+  return stats.usd >= DAILY_BUDGET_USD;
+}
+export function publicStats() {
+  roll();
+  return { day: stats.day, questions: stats.questions, spend_usd: Number(stats.usd.toFixed(3)), budget_usd: DAILY_BUDGET_USD };
+}

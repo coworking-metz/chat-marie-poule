@@ -1,0 +1,23 @@
+# Corpus (données de l'association, non publiées) et sources brutes
+context/
+docs/
+extracted/
+
+# Secrets et configuration locale
+.env
+.env.*
+!.env.example
+.claude/settings.local.json
+
+# Notes internes de travail
+PLAN.md
+CLAUDE.md
+
+# Générés
+node_modules/
+test/derniers-echecs.json
+scripts/__pycache__/
+__pycache__/
+*.pyc
+*.log
+.DS_Store

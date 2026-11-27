@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Marie-Poule · Coworking Metz</title>
+  <meta name="description" content="Posez vos questions à Marie-Poule, l'assistante virtuelle du Coworking Metz (Le Poulailler).">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="app" id="app" data-state="home">
+    <header class="brand">
+      <img src="logo.svg" alt="Le Poulailler — Coworking Metz" width="180" height="60">
+    </header>
+
+    <section class="hero" id="hero">
+      <h1>Posez vos questions à <span class="hl">Marie-Poule</span></h1>
+      <p class="lead">Tarifs, horaires, règles, essai gratuit, association… Je réponds à tout ce qui concerne le Coworking Metz.</p>
+      <ul class="suggestions" aria-label="Questions suggérées">
+        <li><button type="button" class="chip">Quels sont les tarifs ?</button></li>
+        <li><button type="button" class="chip">Comment venir essayer l'espace ?</button></li>
+        <li><button type="button" class="chip">Quelles sont les règles de l'espace ?</button></li>
+        <li><button type="button" class="chip">Quels sont les horaires d'accès ?</button></li>
+      </ul>
+    </section>
+
+    <section class="log" id="log" aria-live="polite" aria-label="Conversation"></section>
+
+    <form class="composer" id="form" autocomplete="off">
+      <label for="q" class="sr-only">Votre question</label>
+      <textarea id="q" rows="1" maxlength="1000" placeholder="Écrivez votre question…" enterkeyhint="send"></textarea>
+      <button type="submit" id="send" class="send">Envoyer</button>
+    </form>
+
+    <footer class="foot">
+      <p>Marie-Poule est une IA : elle peut se tromper. Pour toute question importante, passez par la <a href="https://www.coworking-metz.fr/contact/" target="_blank" rel="noopener">page Contact</a>.</p>
+      <button type="button" class="reset" id="reset" hidden>Nouvelle question</button>
+    </footer>
+  </main>
+  <script src="app.js" type="module"></script>
+</body>
+</html>

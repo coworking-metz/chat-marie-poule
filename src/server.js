@@ -38,7 +38,7 @@ const sessions = createSessionStore({ ttlDays: Number(process.env.SESSION_TTL_DA
 sessions.purge();
 setInterval(() => sessions.purge(), 3600_000).unref();
 const auth = createAuth({ cfg, sessions });
-const members = createMembers({ url: process.env.MEMBER_API_URL === "off" ? null : process.env.MEMBER_API_URL || (cfg.issuer && `${cfg.issuer}/wp-json/cowo/v1/me/summary`) });
+const members = createMembers({ url: process.env.MEMBER_API_URL === "off" ? null : process.env.MEMBER_API_URL || (cfg.issuer && `${cfg.issuer}/api-json-wp/cowo/v1/me/summary`) });
 const anonLimiter = anon.createAnonLimiter();
 if (!cfg.enabled) console.log("SSO non configuré (SSO_ISSUER, SSO_CLIENT_ID, PUBLIC_URL) : mode anonyme seulement.");
 const app = express();

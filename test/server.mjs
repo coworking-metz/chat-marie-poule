@@ -9,6 +9,18 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "mp-test-"));
+// Données fictives (aucune donnée réelle) : contrat de deploy/wordpress/README.md
+const FAKE_SUMMARY = { prenom: "Camille", membre_depuis: "2019-03-04", email: "ne-doit-pas-passer@example.org", telephone: "0600000000",
+  adherent: { a_jour: true, derniere_annee: 2026, fin: "2026-12-31" },
+  abonnement: { en_cours: true, debut: "2026-11-01", fin: "2026-12-15", duree_jours: 45, jours_restants: 18 },
+  carnets: { solde: 3 }, tarif: { type: "reduit", reduit: true, resident_blida: false },
+  nomade: { actif: false, dates_a_venir: [], derniere_date: null },
+  presences: { jours_30: 8, jours_90: 21, total: 120, derniere_venue: "2026-11-25" },
+  statistiques: { par_mois_12: [{ mois: "2026-10", jours: 9 }, { mois: "2026-11", jours: 8 }], moyenne_mensuelle_12: 6.5, par_jour_semaine: { lundi: 30, mardi: 40, mercredi: 20, jeudi: 20, vendredi: 10, samedi: 0, dimanche: 0 },
+    mois_record: { mois: "2026-03", jours: 15 }, premiere_venue: "2019-04-02", total_jours: 120, semaines_consecutives: 3, types: { abonnement: 80, carnet: 40, nomade: 0 } },
+  achats: [{ date: "2026-11-01", produit: "Abonnement 30 jours", categorie: "abonnement", quantite: 1, montant_ttc: 60, statut: "termine" }, { date: "2026-09-10", produit: "Carnet de 10 journées", categorie: "carnet", quantite: 1, montant_ttc: 80, statut: "termine" }],
+  achats_resume: { commandes: 2, articles: 2, total_ttc: 140, par_categorie: { abonnement: { quantite: 1, montant_ttc: 60 }, carnet: { quantite: 1, montant_ttc: 80 } }, depuis: "2019-04-01", complet: true, plus_anciens: 0 },
+  droits: { week_end: true, seuil_week_end: 10, jours_manquants_week_end: 0 }, indisponible: [], maj: "2026-11-27T10:00:00+00:00" };
 const free = () => new Promise((r) => { const s = http.createServer().listen(0, () => { const { port } = s.address(); s.close(() => r(port)); }); });
 const SSO_PORT = await free(), PORT = await free();
 const SSO = `http://127.0.0.1:${SSO_PORT}`, BASE = `http://localhost:${PORT}`;
@@ -44,11 +56,9 @@ const sso = http.createServer(async (req, res) => {
     if (!/^Bearer A\d+$/.test(req.headers.authorization ?? "")) return send(401, {});
     return send(200, { ID: "4242", user_login: "camille@example.org", display_name: "Camille D.", user_email: "camille@example.org", birthDate: "1990-01-01", roles: ["subscriber"], user_registered: "2019-03-04 10:00:00", avatar_url: "https://secure.gravatar.com/avatar/x" });
   }
-  if (u.pathname === "/wp-json/cowo/v1/me/summary") {
+  if (u.pathname === "/api-json-wp/cowo/v1/me/summary") {
     if (!/^Bearer A\d+$/.test(req.headers.authorization ?? "")) return send(401, {});
-    return send(200, { prenom: "Camille", statut: "coworker", email: "ne-doit-pas-passer@example.org", adhesion: { derniere_annee: 2026, a_jour: true },
-      abonnement: { actif: true, fin: "2026-12-15" }, tickets: { solde: 3 }, tarif: { reduit: false, resident_blida: false },
-      frequentation: { jours_30: 8, jours_90: 21, jours_6_mois: 40, total: 120, derniere_venue: "2026-11-25" } });
+    return send(200, FAKE_SUMMARY);
   }
   if (u.pathname === "/oauth/revoke/") return send(200, {});
   send(404, {});
@@ -56,7 +66,7 @@ const sso = http.createServer(async (req, res) => {
 
 // ---- Serveur de l'application ----
 const env = { ...process.env, PORT: String(PORT), CHAT_STUB: "test/stub-chat.mjs", SESSIONS_DIR: path.join(tmp, "sess"), ANON_FILE: path.join(tmp, "anon.json"), ANON_MAX_QUESTIONS_PER_IP_PER_DAY: "12",
-  SSO_ISSUER: SSO, SSO_CLIENT_ID: "marie-poule", PUBLIC_URL: BASE, MEMBER_API_URL: `${SSO}/wp-json/cowo/v1/me/summary`,
+  SSO_ISSUER: SSO, SSO_CLIENT_ID: "marie-poule", PUBLIC_URL: BASE, MEMBER_API_URL: `${SSO}/api-json-wp/cowo/v1/me/summary`,
   ANON_MAX_QUESTIONS: "5", RATE_LIMIT_PER_MIN: "1000", MODEL: "stub" };
 const child = spawn(process.execPath, ["src/server.js"], { env, stdio: ["ignore", "pipe", "pipe"], cwd: new URL("..", import.meta.url).pathname });
 let logs = ""; child.stdout.on("data", (d) => (logs += d)); child.stderr.on("data", (d) => (logs += d));
@@ -143,6 +153,8 @@ try {
     h = [...h, ...pair(`Q${i}`)].slice(-10);
   }
   assert.ok(ctxText.includes("Camille") && ctxText.includes("Journées de présence sur les 90 derniers jours : 21") && ctxText.includes("décembre 2026"));
+  assert.ok(ctxText.includes("Abonnement 30 jours – 60 €") && ctxText.includes("Moyenne mensuelle sur 12 mois : 6,5") && ctxText.includes("Tarif : réduit") && ctxText.includes("Régularité : 3 semaine"));
+  assert.ok(!/0600000000|ne-doit-pas-passer/.test(ctxText));
   assert.ok(!/example\.org|1990|4242|Bearer/.test(ctxText), "pas d'e-mail, de date de naissance ni d'identifiant dans le contexte");
   assert.ok(ctxText.includes("donnees_personne_connectee") && ctxText.includes("UNIQUEMENT la personne"));
   assert.equal(fs.existsSync(path.join(tmp, "conv")), false, "aucun dossier de conversations");

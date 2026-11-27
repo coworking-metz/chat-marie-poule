@@ -141,9 +141,36 @@ assert.deepEqual(inlineRuns("a **b** [c](https://x.fr/y) d").map((r) => r.t), ["
 // ---- contexte du membre : minimisation ----
 import { normalizeSummary, formatMember } from "../src/members.js";
 {
-  const n = normalizeSummary({ prenom: "Camille", email: "a@b.c", telephone: "0600000000", ID: 9, adhesion: { a_jour: true, derniere_annee: 2026 }, frequentation: { jours_90: 31, total: 4 }, tickets: { solde: "x" } });
+  const n = normalizeSummary({ prenom: "Camille", email: "a@b.c", telephone: "0600000000", ID: 9, adherent: { a_jour: true, derniere_annee: 2026 }, presences: { jours_90: 31, total: 4 }, carnets: { solde: "x" }, indisponible: ["achats", "bidon"] });
   const txt = formatMember(n, "2026-11-27");
   assert.ok(txt.includes("Camille") && txt.includes("90 derniers jours : 31") && txt.includes("week-end (au moins 10 journées coworkées) : non"));
-  assert.ok(!/a@b\.c|0600|\b9\b/.test(txt)); assert.ok(txt.includes("NON disponibles") && txt.includes("Solde de tickets"));
+  assert.ok(!/a@b\.c|0600|\b9\b/.test(txt)); assert.ok(txt.includes("NON disponibles") && txt.includes("Solde de carnets") && txt.includes("Achats de la boutique") && txt.includes("section « achats »") && !txt.includes("bidon"));
+  assert.ok(txt.includes("Maître de stage ou d'alternance (30 journées sur 90 jours) : condition remplie"));
+}
+{ // achats : 10 lignes au plus, le reste compté ; produits nettoyés ; catégories inconnues -> autre
+  const achats = Array.from({ length: 14 }, (_, i) => ({ date: `2026-0${(i % 9) + 1}-05`, produit: `Produit ${i} <b>`, categorie: i ? "carnet" : "zzz", quantite: 1, montant_ttc: 10 }));
+  const txt = formatMember(normalizeSummary({ prenom: "Camille", achats, achats_resume: { commandes: 14, total_ttc: 140, complet: false, plus_anciens: 3, par_categorie: { carnet: { quantite: 13, montant_ttc: 130 }, x: {} } } }), "2026-11-27");
+  assert.equal(txt.split("\n").filter((l) => l.startsWith("- ")).length, 10);
+  assert.ok(txt.includes("7 autre(s) achat(s) plus ancien(s)") && txt.includes("historique tronqué") && !txt.includes("<b>") && txt.includes("total 140 € TTC"));
+  assert.ok(normalizeSummary({ achats: [{ produit: "P", categorie: "zzz" }] }).achats[0].categorie === "autre");
+}
+{ // sections nulles (endpoint partiel) : jamais d'exception, informations déclarées manquantes
+  const n = normalizeSummary({ prenom: "Camille", adherent: null, abonnement: null, presences: null, statistiques: null, achats: null, nomade: null, droits: null, indisponible: ["presences", "achats"] });
+  const txt = formatMember(n, "2026-11-27");
+  assert.ok(txt.includes("Camille") && txt.includes("Droit de venir le week-end") && txt.includes("Achats de la boutique") && !/week-end \(au moins/.test(txt));
+  assert.doesNotThrow(() => formatMember(normalizeSummary(null)));
+  assert.doesNotThrow(() => formatMember(normalizeSummary("n'importe quoi")));
+}
+{ // repli : 500, timeout, JSON invalide -> identité de base, réessai après 30 s
+  const { createMembers } = await import("../src/members.js");
+  const session = { user: { nom: "Camille D.", statut: "coworker" } };
+  let t = 0, calls = 0, mode = "500";
+  const f = async () => { calls++; if (mode === "500") return { ok: false, status: 500 }; if (mode === "throw") throw new Error("timeout"); if (mode === "badjson") return { ok: true, json: async () => { throw new Error("x"); } }; return { ok: true, json: async () => ({ prenom: "Camille", presences: { jours_30: 2 } }) }; };
+  const m = createMembers({ url: "http://x/y", fetchImpl: f, now: () => t });
+  for (const md of ["500", "throw", "badjson"]) { mode = md; t += 60000; const txt = await m.contextFor("s" + md, session, async () => "tok"); assert.ok(txt.includes("Camille D.") && txt.includes("Statut approximatif du compte : coworker") && txt.includes("NON disponibles"), md); }
+  mode = "500"; const c0 = calls; await m.contextFor("sx", session, async () => "tok"); await m.contextFor("sx", session, async () => "tok"); assert.equal(calls, c0 + 1, "échec mis en cache brièvement");
+  mode = "ok"; t += 31000; assert.ok((await m.contextFor("sx", session, async () => "tok")).includes("sur les 30 derniers jours : 2"), "réessai après 30 s");
+  const c1 = calls; t += 4 * 60000; await m.contextFor("sx", session, async () => "tok"); assert.equal(calls, c1, "succès mis en cache 5 min");
+  t += 2 * 60000; mode = "500"; await m.contextFor("sx", session, async () => "tok"); assert.equal(calls, c1 + 1);
 }
 console.log("tests hors ligne : OK");

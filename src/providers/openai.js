@@ -128,7 +128,8 @@ async function* turn(messages, round, signal) {
 
     const filter = createThinkFilter({ startInThink: THINK_PREFIXED });
     const calls = []; // fragments d'appels d'outils accumulés par index
-    let text = "", finish = null, usage = null;
+    let text = "", finish = null, usage = null, started = false;
+    const lead = (v) => { if (started) return v; v = v.replace(/^\s+/, ""); if (v) started = true; return v; }; // pas d'espaces en tête de réponse
     for await (const chunk of sseJson(res.body, bump)) {
       if (chunk.usage) usage = chunk.usage;
       const choice = chunk.choices?.[0];
@@ -137,9 +138,9 @@ async function* turn(messages, round, signal) {
       // d.reasoning_content / d.reasoning : raisonnement du modèle, volontairement ignoré (jamais affiché).
       if (typeof d.content === "string" && d.content) {
         const was = filter.stray;
-        const vis = filter.push(d.content);
-        if (filter.stray && !was) yield { type: "reset" }; // le texte déjà émis était du raisonnement
-        if (filter.stray && !was) text = "";
+        let vis = filter.push(d.content);
+        if (filter.stray && !was) { yield { type: "reset" }; text = ""; started = false; } // le texte déjà émis était du raisonnement
+        vis = lead(vis);
         if (vis) { text += vis; yield { type: "delta", text: vis }; }
       }
       for (const tc of d.tool_calls ?? []) {
@@ -151,7 +152,7 @@ async function* turn(messages, round, signal) {
       }
       if (choice.finish_reason) finish = choice.finish_reason;
     }
-    const tail = filter.end();
+    const tail = lead(filter.end());
     if (tail) { text += tail; yield { type: "delta", text: tail }; }
     return { text, toolCalls: calls.filter(Boolean), finish, usage };
   } finally {

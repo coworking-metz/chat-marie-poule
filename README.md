@@ -46,7 +46,20 @@ PORT=3100 PROVIDER=openai-compatible MODEL=<id> OVH_AI_ENDPOINTS_ACCESS_TOKEN=..
   ANON_MAX_QUESTIONS_PER_IP_PER_DAY=1000 RATE_LIMIT_PER_MIN=1000 EXPOSE_USAGE=1 node src/server.js
 node test/compare.mjs --url http://localhost:3100 --label gpt-oss-120b
 ```
-Faire de même pour Anthropic (`PORT=3101 MODEL=claude-sonnet-5-5 …`, sans `PROVIDER`) puis comparer : `node test/compare.mjs --diff test/rapports/<a>.json test/rapports/<b>.json`. `compare.mjs` pose les ~54 questions de `test/questions.json`, mesure réussite des vérifications grossières, longueur, liens (dont liens ancrés du règlement), refus, latence (1er token, total), tokens et coût estimé, et écrit un rapport JSON + Markdown dans `test/rapports/` (gitignoré). `EXPOSE_USAGE=1` (serveur de test uniquement) fait remonter l'usage par question. Les vérifications automatiques sont grossières : relire les réponses des rapports Markdown avant de conclure. Les tests hors ligne du fournisseur (faux serveur OpenAI : streaming, outils, JSON invalide, 429, 500, filtre de contenu, raisonnement) sont dans `test/providers.mjs`.
+Faire de même pour Anthropic (`PORT=3101 MODEL=claude-sonnet-5-5 …`, sans `PROVIDER`) puis comparer : `node test/compare.mjs --diff test/rapports/<a>.json test/rapports/<b>.json`. `compare.mjs` pose les ~54 questions de `test/questions.json`, mesure réussite des vérifications grossières, longueur, liens (dont liens ancrés du règlement), refus, latence (1er token, total), tokens et coût estimé, et écrit un rapport JSON + Markdown dans `test/rapports/` (gitignoré). `EXPOSE_USAGE=1` (serveur de test uniquement) fait remonter l'usage par question. Les vérifications automatiques sont grossières : relire les réponses des rapports Markdown avant de conclure. **Comparatif du 2026-11-27** (54 questions, un seul passage, vérifications automatiques grossières ; relues à la main pour les échecs) :
+
+| | Sonnet 5.5 (Anthropic) | gpt-oss-120b (OVH, effort bas) | Mistral-Small-3.2-24B (OVH) | Qwen3.5-397B-A17B (OVH) |
+|---|---|---|---|---|
+| Réussies | 52/54 (les 2 échecs sont de faux positifs) | 47/54 | 48/54 | 52/54 (2 vrais échecs : aveu d'ignorance sans lien de contact) |
+| Liens par réponse (moy.) | 2,1 | 0,8 | 0,6 | 1,1 |
+| Lien ancré du règlement (3 cas) | 3/3 | 3/3 | 2/3 | 3/3 |
+| Longueur moyenne | 604 car. | 438 | 356 | 529 |
+| 1er token médian / total médian | 1,1 s / 2,7 s | 1,1 s / 2,8 s | 0,3 s / 2,9 s | 2,1 s / 3,1 s |
+| Coût moyen par question | 0,0087 $ | 0,0023 $ | 0,0021 $ | 0,0228 $ |
+
+Lecture : Qwen3.5-397B est le seul OVH au niveau de Sonnet pour le respect des règles (refus, injections, règlement), mais il coûte 2,6 x plus cher par question que Sonnet (beaucoup de tokens de sortie, prompt de ~29 000 tokens sans cache) et cite moins de liens. gpt-oss-120b et Mistral-Small coûtent ~4 x moins cher que Sonnet mais sourcent peu (moins de liens, pas toujours le lien de contact), refusent à tort ou répondent hors périmètre (élections), et Mistral est le plus rapide. Sonnet reste la référence pour le sourçage ; aucun candidat OVH ne le remplace sans perte de qualité à ce jour. Le gain d'un modèle ouvert est la souveraineté (hébergement en France) plus que le coût, car le prompt de ~30 000 tokens est facturé en entrée à chaque question chez OVH (pas de cache) alors qu'Anthropic le met en cache. Rapports détaillés (réponses comprises) dans `test/rapports/` (local).
+
+Les tests hors ligne du fournisseur (faux serveur OpenAI : streaming, outils, JSON invalide, 429, 500, filtre de contenu, raisonnement) sont dans `test/providers.mjs`.
 
 ## Variables d'environnement (`MODEL` est obligatoire, ainsi que `CLAUDE_API_KEY` avec `PROVIDER=anthropic` ; les autres sont facultatives)
 `PROVIDER`, `LLM_*`, `PRICE_*` (voir « Fournisseurs de modèles »), `CLAUDE_API_KEY`, `MODEL` (ex. `claude-sonnet-5-5`), `WORKSPACE_ID` (si la clé n'est pas rattachée à un espace de travail), `PORT`, `EFFORT` (low), `MAX_OUTPUT_TOKENS`, `RATE_LIMIT_PER_MIN`, `DAILY_BUDGET_USD`, `CORS_ORIGINS` (liste séparée par des virgules, pour intégrer au site), `TRUST_PROXY` (derrière Apache/nginx), `FALLBACKS=off`, `ANON_MAX_QUESTIONS`, `ANON_MAX_QUESTIONS_PER_IP_PER_DAY`, `PDF_RATE_LIMIT_PER_MIN`, `SSO_*`, `PUBLIC_URL`, `MEMBER_API_URL`, `SESSION_TTL_DAYS` (voir plus haut).

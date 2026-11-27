@@ -25,7 +25,7 @@ export async function startFakeOpenAI() {
     const afterTool = msgs.at(-1).role === "tool";
     const scen = /SCENARIO:(\w+)/.exec(last)?.[1];
     switch (scen) {
-      case "texte": return sse(res, text("Bonjour, ", "voici la ", "réponse."));
+      case "texte": return sse(res, text("\n  ", "Bonjour, ", "voici la ", "réponse."));
       case "outil":
         if (!afterTool) return sse(res, toolCall("call_1", "chercher", ['{"mo', 'ts":"tar', 'ifs"}'], ["Je vais chercher… "]));
         return sse(res, text("Réponse après outil : ", msgs.at(-1).content.length > 0 ? "ok" : "vide"));

@@ -76,6 +76,12 @@ auth.mount(app);
 // à ne renseigner que si elle est vraie, par ex. « hébergé en France chez OVHcloud »).
 app.get("/api/config", (req, res) => res.json({ model: process.env.MODEL_LABEL || MODEL, hosting: process.env.MODEL_HOSTING || null }));
 
+// État de la limite anonyme (lu à partir du cookie du visiteur et de l'IP) : l'interface reste bloquée après un rechargement.
+app.get("/api/anon-status", (req, res) => {
+  const id = parseCookies(req.headers.cookie)[anon.ANON_COOKIE];
+  res.json({ limite: anonLimiter.limited(id, req.ip), message: anon.LIMIT_MESSAGE });
+});
+
 app.get("/api/health", (req, res) => res.json({ ok: true, provider: PROVIDER, model: MODEL, fiches: fiches.size, ...publicStats() }));
 
 app.post("/api/chat", express.json({ limit: "64kb" }), async (req, res) => {

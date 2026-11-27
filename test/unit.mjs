@@ -110,6 +110,9 @@ assert.ok(LIMIT_MESSAGE.includes("https://rejoindre.coworking-metz.fr/") && LIMI
   const v = newVisitorId();
   for (let i = 1; i <= 5; i++) { assert.equal(l.allowed(v, "1.2.3.4", hist(i)), true, `question ${i}`); assert.equal(l.record(v, "1.2.3.4"), 5 - i); }
   assert.equal(l.allowed(v, "1.2.3.4", hist(1)), false, "6e refusée : compteur du cookie");
+  assert.equal(l.limited(v, "9.9.9.9"), true, "limite atteinte : mémorisée par le cookie, quelle que soit l'IP");
+  assert.equal(l.limited(newVisitorId(), "5.6.7.8"), false, "autre visiteur, autre IP : pas bloqué");
+  assert.equal(l.limited(undefined, "5.6.7.8"), false, "sans cookie valide et IP vierge : pas bloqué");
   assert.equal(l.allowed(newVisitorId(), "5.6.7.8", hist(6)), false, "historique de 6 questions refusé");
   // contournement par suppression du cookie : plafond par IP
   const r = [];

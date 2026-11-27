@@ -57,6 +57,12 @@ export function createAnonLimiter({ file, maxQuestions = ANON_MAX_QUESTIONS, max
   return {
     /** Questions déjà posées par ce visiteur (cookie) et par cette IP aujourd'hui. */
     status(id, ip) { roll(); return { n: count(id), ip: state.ips[ik(ip)] ?? 0 }; },
+    /** true si ce visiteur (cookie) ou cette IP a atteint sa limite : sert à bloquer l'interface dès le chargement de la page. */
+    limited(id, ip) {
+      roll();
+      const n = validVisitorId(id) ? count(id) : 0;
+      return n >= maxQuestions || (state.ips[ik(ip)] ?? 0) >= maxPerIp;
+    },
     /** true si une nouvelle question est permise ; `history` = historique envoyé (ne doit pas dépasser la limite). */
     allowed(id, ip, history) {
       const { n, ip: c } = this.status(id, ip);

@@ -177,6 +177,10 @@ renderAccount();
 // Reprise de la conversation de l'onglet (rechargement, retour de connexion). Une personne connectée n'est pas limitée.
 messages = store.load();
 limited = store.loadLimit() && !me.connecte;
+// Le serveur fait foi (cookie du visiteur + plafond par IP) : on reste bloqué après un rechargement, même dans un nouvel onglet.
+if (!me.connecte) {
+  try { const r = await fetch("/api/anon-status"); if (r.ok) limited = !!(await r.json()).limite; } catch {}
+}
 for (const x of messages) add(x.role === "user" ? "user" : "bot", x.content);
 if (!me.connecte) store.saveLimit(); else { limited = false; store.saveLimit(); }
 setState();

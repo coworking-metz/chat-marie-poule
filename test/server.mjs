@@ -99,6 +99,10 @@ try {
   const sixth = await events(await ask(a, hist, "Question 6"));
   assert.equal(sixth.length, 1); assert.equal(sixth[0][0], "limit");
   assert.ok(sixth[0][1].text.includes("rejoindre.coworking-metz.fr") && sixth[0][1].text.includes("#ouvrir-brevo"));
+  // le blocage est mémorisé côté serveur par le cookie : l'interface le retrouve après un rechargement ou dans un autre onglet
+  const st = await (await call(a, "/api/anon-status")).json();
+  assert.equal(st.limite, true, "limite atteinte retrouvée via le cookie");
+  assert.ok(st.message.includes("rejoindre.coworking-metz.fr"), "même message de renvoi, sans passer par le modèle");
   // « Nouvelle question » (historique vide) ne remet pas le compteur à zéro
   assert.equal((await events(await ask(a, [], "Autre sujet")))[0][0], "limit");
   // suppression du cookie : plafond par IP (12 par jour ; 5 déjà posées), historique falsifié à 6 questions refusé

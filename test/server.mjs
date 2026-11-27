@@ -65,7 +65,7 @@ const sso = http.createServer(async (req, res) => {
 }).listen(SSO_PORT);
 
 // ---- Serveur de l'application ----
-const env = { ...process.env, PORT: String(PORT), CHAT_STUB: "test/stub-chat.mjs", SESSIONS_DIR: path.join(tmp, "sess"), ANON_FILE: path.join(tmp, "anon.json"), ANON_MAX_QUESTIONS_PER_IP_PER_DAY: "12",
+const env = { ...process.env, PORT: String(PORT), CHAT_STUB: "test/stub-chat.mjs", SESSIONS_DIR: path.join(tmp, "sess"), ANON_FILE: path.join(tmp, "anon.json"), SPEND_FILE: path.join(tmp, "spend.json"), ANON_MAX_QUESTIONS_PER_IP_PER_DAY: "12",
   SSO_ISSUER: SSO, SSO_CLIENT_ID: "marie-poule", PUBLIC_URL: BASE, MEMBER_API_URL: `${SSO}/api-json-wp/cowo/v1/me/summary`,
   ANON_MAX_QUESTIONS: "5", RATE_LIMIT_PER_MIN: "1000", MODEL: "stub",
   MODEL_LABEL: "Modèle membre", MODEL_HOSTING: "hébergement membre", ANON_MODEL: "stub-anon", ANON_MODEL_LABEL: "Modèle anonyme" };

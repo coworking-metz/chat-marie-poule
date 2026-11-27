@@ -1,3 +1,7 @@
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
 // Garde-fous : taille des entrées, débit par IP, plafond de dépense quotidien. Aucun texte de question n'est conservé.
 export const MAX_QUESTION_CHARS = Number(process.env.MAX_QUESTION_CHARS) || 1000;
 export const MAX_HISTORY_MESSAGES = Number(process.env.MAX_HISTORY_MESSAGES) || 10;
@@ -43,9 +47,25 @@ export function rateLimited(ip, limit = RATE_LIMIT, hits_ = hits) {
 
 // Compteurs anonymes (RGPD) : dépense estimée du jour, nombre de questions.
 const stats = { day: "", usd: 0, questions: 0 };
+// Le total du jour survit à un redémarrage : petit fichier de compteurs (jour, dépense estimée, nombre de questions ; jamais de texte).
+const SPEND_FILE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", process.env.SPEND_FILE || "data/spend.json");
+const today = () => new Date().toISOString().slice(0, 10);
+try {
+  const s = JSON.parse(fs.readFileSync(SPEND_FILE, "utf8"));
+  if (s?.day === today() && Number.isFinite(s.usd) && Number.isFinite(s.questions)) Object.assign(stats, { day: s.day, usd: s.usd, questions: s.questions });
+} catch { /* premier démarrage ou fichier absent */ }
+let spendTimer = null;
+function persist() {
+  if (spendTimer) return;
+  spendTimer = setTimeout(() => { // écriture groupée
+    spendTimer = null;
+    try { fs.mkdirSync(path.dirname(SPEND_FILE), { recursive: true }); fs.writeFileSync(SPEND_FILE, JSON.stringify(stats), { mode: 0o600 }); } catch { /* en mémoire seulement */ }
+  }, 1000);
+  spendTimer.unref?.();
+}
 function roll() {
-  const d = new Date().toISOString().slice(0, 10);
-  if (stats.day !== d) Object.assign(stats, { day: d, usd: 0, questions: 0 });
+  const d = today();
+  if (stats.day !== d) { Object.assign(stats, { day: d, usd: 0, questions: 0 }); persist(); }
 }
 // Tarifs en USD par million de tokens, selon le modèle utilisé (PRICE_INPUT_PER_M / PRICE_OUTPUT_PER_M ;
 // défaut : Sonnet 5.5 = 2 / 10). Cache Anthropic : lecture 0,05 x et écriture 1,25 x le prix d'entrée
@@ -68,12 +88,14 @@ export function addUsage(u = {}, price) {
   roll();
   const usd = usageCost(u, price);
   stats.usd += usd;
+  persist();
   const input = (u.input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0);
   return { input, output: u.output_tokens ?? 0, usd };
 }
 export function countQuestion() {
   roll();
   stats.questions++;
+  persist();
 }
 export function budgetExceeded() {
   roll();

@@ -182,3 +182,18 @@ import { normalizeSummary, formatMember } from "../src/members.js";
   t += 2 * 60000; mode = "500"; await m.contextFor("sx", session, async () => "tok"); assert.equal(calls, c1 + 1);
 }
 console.log("tests hors ligne : OK");
+
+// Plafond de dépense : le total du jour survit à un redémarrage (fichier de compteurs, sans texte).
+{
+  const { execFileSync } = await import("node:child_process");
+  const f = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "mp-spend-")), "spend.json");
+  const run = (code) => execFileSync(process.execPath, ["--input-type=module", "-e", code], { env: { ...process.env, SPEND_FILE: f, PRICE_INPUT_PER_M: "1", PRICE_OUTPUT_PER_M: "2", DAILY_BUDGET_USD: "3" }, cwd: process.cwd(), encoding: "utf8" });
+  run(`import * as l from "./src/limits.js"; l.countQuestion(); l.addUsage({ input_tokens: 1000000, output_tokens: 500000 }); await new Promise((r) => setTimeout(r, 1300));`);
+  const raw = fs.readFileSync(f, "utf8");
+  assert.ok(JSON.parse(raw).usd > 1.9 && JSON.parse(raw).questions === 1 && !/[a-z]{12}/i.test(raw.replace(/"day"|"usd"|"questions"/g, "")), "fichier de compteurs sans texte");
+  const out = JSON.parse(run(`import * as l from "./src/limits.js"; console.log(JSON.stringify({ ...l.publicStats(), depasse: l.budgetExceeded() }));`));
+  assert.equal(out.questions, 1, "compteur de questions conservé après redémarrage");
+  assert.ok(out.spend_usd >= 1.99 && out.spend_usd <= 2.01, "dépense du jour conservée après redémarrage");
+  assert.equal(out.depasse, false);
+}
+console.log("plafond de dépense persistant : OK");

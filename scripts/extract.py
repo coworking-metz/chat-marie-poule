@@ -169,7 +169,7 @@ def plain(path):
 
 HANDLERS = {
     "docx": docx, "pptx": pptx, "pptm": pptx, "xlsx": xlsx, "xlsm": xlsx, "odt": odt, "pdf": pdf,
-    "csv": plain, "txt": plain, "json": plain, "gform": plain,
+    "csv": plain, "txt": plain, "md": plain, "json": plain, "gform": plain,
 }
 IMAGES = {"jpg", "jpeg", "png", "heic", "gif", "webp"}
 
